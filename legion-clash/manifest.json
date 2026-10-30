@@ -1,0 +1,16 @@
+{
+  "name": "Legion Clash",
+  "short_name": "Legion Clash",
+  "description": "Build an army card by card and watch it fight, or command it yourself.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2b1d14",
+  "theme_color": "#2b1d14",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
