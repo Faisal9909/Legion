@@ -29,7 +29,7 @@
 <div id="wrap"></div><canvas id="c"></canvas>
 <script>
 'use strict';
-const VERSION = '2026.10.30-6';   // shown on the title screen so you can tell which version is running
+const VERSION = '2026.10.30-7';   // shown on the title screen so you can tell which version is running
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => {});
 
 // =====================================================================
@@ -46,9 +46,8 @@ const OUT = '#2a1d18';
 const LW = 2.3;
 const AR = { x: 44, y: 172, w: 362, h: 630 };
 const MID = AR.y + AR.h / 2;
-const COIN_POS = { x: 36, y: 946 };
+const COIN_POS = { x: 32, y: 133 };
 const STEP = 1 / 60;
-const PICKS_PER_ROUND = 3;
 const T2_SIZE = 1.18;
 const MARCH_T = 1.8;
 
@@ -121,7 +120,7 @@ const ORDER = ['elephant', 'rider', 'swordsman', 'wolf', 'spearman', 'healer', '
 const RULES = {
   shields:   { title: 'Shields Up',  desc: '40% less arrow + stone damage', rar: 2 },
   battlecry: { title: 'Battle Cry',  desc: '+15% damage for all', rar: 2 },
-  gold:      { title: 'Bonus Gold',  desc: '+8 coins for rerolls', rar: 1 },
+  gold:      { title: 'Bonus Gold',  desc: '+8 coins to spend', rar: 1 },
   drums:     { title: 'War Drums',   desc: 'Everyone attacks 20% faster', rar: 2 },
 };
 const RAR_W = [60, 30, 12], UP_W = 34;
@@ -173,10 +172,69 @@ function loadSave() {
   return { best: 0, streak: 0, opp: 0, speed: 2, speedC: 1, mode: 'auto', match: 'classic', bestLevel: 0, bestEndless: 0, bestSurv: 0 };
 }
 // campaign progress (your army between matches) lives on this device only
-function loadCamp() { try { return JSON.parse(localStorage.getItem('legionclash.campaign')) || null; } catch (e) { return null; } }
+function validSide(P) { return P && typeof P === 'object' && P.army && typeof P.army === 'object' && P.tiers && P.mods; }
+function loadCamp() {
+  try {
+    const c = JSON.parse(localStorage.getItem('legionclash.campaign'));
+    if (c && c.level >= 1 && c.round >= 1 && validSide(c.P)) return c;
+    if (c) localStorage.removeItem('legionclash.campaign');   // unreadable save: drop it instead of freezing
+  } catch (e) {}
+  return null;
+}
 function saveCamp(c) { try { if (c) localStorage.setItem('legionclash.campaign', JSON.stringify(c)); else localStorage.removeItem('legionclash.campaign'); } catch (e) {} G.camp = c; }
+// an endless or survivor run in progress, so iOS closing the app doesn't lose it
+function loadRun() {
+  try {
+    const r = JSON.parse(localStorage.getItem('legionclash.run'));
+    if (r && (r.match === 'endless' || r.match === 'survivor') && r.mround >= 1 && validSide(r.P) && validSide(r.E)) return r;
+    if (r) localStorage.removeItem('legionclash.run');
+  } catch (e) {}
+  return null;
+}
+function saveRun() {
+  if (!lives()) return;
+  const r = { match: G.match, mround: G.mround, round: G.round, lastWinner: G.lastWinner, freeRerolls: G.freeRerolls,
+    P: { ...packSide(G.P), wreaths: G.P.wreaths }, E: { ...packSide(G.E), wreaths: G.E.wreaths }, stats: G.stats };
+  try { localStorage.setItem('legionclash.run', JSON.stringify(r)); } catch (e) {}
+  G.run = r;
+}
+function clearRun() { try { localStorage.removeItem('legionclash.run'); } catch (e) {} G.run = null; }
+// short tips shown once each, the first time a mode or feature is met
+function loadTips() { try { return JSON.parse(localStorage.getItem('legionclash.tips')) || {}; } catch (e) { return {}; } }
+const TIPS = {
+  cmd: 'Tap the arena to plant a flag: troops attack near it or hold there. The chips pick who. CHARGE = +30% damage, +35% speed for 4s.',
+  survivor: 'Only survivors come back. Each round a type survives it earns a ★: +8% HP and damage, up to 5. A wiped-out type loses its stars.',
+  campaign: 'Win to keep your army and face a tougher foe. Lose and you retry the level with 25% fewer troops (3 tries).',
+  endless: '3 lives, and 1 back every 5 wins. The horde gets stronger every round.',
+  coins: '+1 CARD buys an extra pick this round; the enemy gets none. Saved coins earn interest: +1 per 5 (max +4).',
+};
+function tip(key) {
+  if (G.tips[key]) return;
+  G.tips[key] = 1; G.tip = { text: TIPS[key], t: 0, life: 7 };
+  try { localStorage.setItem('legionclash.tips', JSON.stringify(G.tips)); } catch (e) {}
+}
+function showTipFor() {
+  if (G.mround === 1 && TIPS[G.match]) tip(G.match);
+  else if (G.P.coins >= 6) tip('coins');
+}
+function wrapLines(g, text, maxW, size) {
+  g.font = `400 ${size}px ${F}`;
+  const out = [''];
+  for (const w of text.split(' ')) { const t = out[out.length - 1] ? out[out.length - 1] + ' ' + w : w; if (g.measureText(t).width > maxW && out[out.length - 1]) out.push(w); else out[out.length - 1] = t; }
+  return out;
+}
+function drawTip(g) {
+  const T = G.tip; if (!T) return;
+  const L = wrapLines(g, T.text, 360, 14), h = 22 + L.length * 18;
+  const a = Math.min(1, T.t * 4, (T.life - T.t) * 2); if (a <= 0) return;
+  g.save(); g.globalAlpha = a;
+  rr(g, 30, 186, 390, h, 14); fs(g, 'rgba(36,24,18,.92)', '#ffe08a', 2);
+  L.forEach((l, i) => txt(g, l, 225, 186 + 20 + i * 18, 14, '#fdf1dc', { stroke: false }));
+  g.restore();
+  if (!G.btns.some(b => b.tip)) G.btns.push({ x: 30, y: 186, w: 390, h, fn: () => { T.t = Math.max(T.t, T.life - 0.3); }, tip: 1 });
+}
 function save() {
-  try { localStorage.setItem('legionclash.save', JSON.stringify({ best: G.best, streak: G.streak, opp: G.opp, speed: G.speedA, speedC: G.speedC, mode: G.mode, match: G.match, bestLevel: G.bestLevel, bestEndless: G.bestEndless, bestSurv: G.bestSurv })); } catch (e) {}
+  try { localStorage.setItem('legionclash.save', JSON.stringify({ best: G.best, streak: G.streak, opp: G.opp, speed: G.speedA, speedC: G.speedC, mode: G.mode, match: G.match, bestLevel: G.bestLevel, bestEndless: G.bestEndless, bestSurv: G.bestSurv, lossRow: G.lossRow || 0 })); } catch (e) {}
 }
 
 // ---------- state -----------------------------------------------------
@@ -187,10 +245,10 @@ const G = {
   btns: [], offer: [], draftT: 0, draftMax: 15, draftAge: 0, mercy: false, freeRerolls: 0, pickNo: 0,
   picked: null, revealT: 0, landT: 0, formT: 0, bt: 0, bstart: 0, ending: false, rt: 0, lastWinner: -1,
   banner: null, thumb: null, shake: 0, excite: 0.25, speed: 1, speedA: saved.speed || 2, speedC: saved.speedC || 1, mode: saved.mode || 'auto', skip: false,
-  match: saved.match || 'classic', bestLevel: saved.bestLevel || 0, bestEndless: saved.bestEndless || 0, bestSurv: saved.bestSurv || 0, picks: 3, level: 1, mround: 1, camp: null,
+  match: saved.match || 'classic', bestLevel: saved.bestLevel || 0, bestEndless: saved.bestEndless || 0, bestSurv: saved.bestSurv || 0, lossRow: saved.lossRow || 0, eased: false, tips: loadTips(), tip: null, chipList: null, draftNote: '', resultNote: null, campTries: 3, run: null, picks: 3, level: 1, mround: 1, camp: null,
   sel: 0, ord: {}, boost: [0, 0], boostCd: [0, 0], stats: null, chief: '', defeated: '', won: false,
 };
-G.camp = loadCamp();
+G.camp = loadCamp(); G.run = loadRun();
 const sideOf = i => i ? G.E : G.P;
 const chiefName = n => CHIEFS[n % CHIEFS.length] + (n >= CHIEFS.length ? ' ' + (Math.floor(n / CHIEFS.length) + 1) : '');
 const count = S => Object.values(S.army).reduce((a, b) => a + b, 0);
@@ -198,16 +256,36 @@ const scaleOf = (S, t) => UNITS[t].size * (S.tiers[t] === 2 ? T2_SIZE : 1);
 function later(t, fn) { G.timers.push({ t, fn }); }
 function newSide() { return { army: {}, tiers: {}, pow: {}, vet: {}, mods: { dmg: 1, hp: 1, cd: 1, shields: false }, wreaths: 3, coins: 0 }; }
 // past this many soldiers, a new soldier card makes that unit type stronger instead of bigger
-const ARMY_CAP = 180;
+const ARMY_CAP = 180, POW_MAX = 4, RULE_MAX = 3;
 function boostInfo(S, c) {
   if (c.kind !== 'add' || !(S.army[c.unit] > 0) || count(S) + c.n <= ARMY_CAP) return null;
   // as strong as if the soldiers had been added: (current strength + new soldiers) / current strength
-  const base = S.army[c.unit] * ((S.pow && S.pow[c.unit]) || 1);
-  const f = (base + c.n) / base;
-  return { f, pct: Math.max(1, Math.round((Math.sqrt(f) - 1) * 100)) };
+  const cur = (S.pow && S.pow[c.unit]) || 1, base = S.army[c.unit] * cur;
+  const f = Math.min((base + c.n) / base, POW_MAX / cur);   // a unit type tops out at 2x HP and 2x damage
+  return { f, pct: Math.max(1, Math.round((Math.sqrt(f) - 1) * 100)), maxed: cur >= POW_MAX - 1e-6 };
+}
+// the effect of a card on a side (no visuals); used for the player, the enemy and quick simulations
+function applyEffect(S, c) {
+  const bi = boostInfo(S, c);
+  if (c.kind === 'add' && bi) S.pow[c.unit] = Math.min(POW_MAX, (S.pow[c.unit] || 1) * bi.f);
+  else if (c.kind === 'add') { S.army[c.unit] = (S.army[c.unit] || 0) + c.n; if (!S.tiers[c.unit]) S.tiers[c.unit] = 1; }
+  else if (c.kind === 'up') S.tiers[c.unit] = 2;
+  else {
+    S.stacks = S.stacks || {}; S.stacks[c.id] = (S.stacks[c.id] || 0) + 1;
+    if (c.id === 'shields') S.mods.shields = true;
+    if (c.id === 'battlecry') S.mods.dmg *= 1.15;
+    if (c.id === 'gold') S.coins += 8;
+    if (c.id === 'drums') S.mods.cd *= 0.83;
+  }
+  return bi;
+}
+// extra enemy picks for a round: a smooth ramp (about +1 pick every 3 rounds at difficulty 4) instead of a cliff
+function extraPicks(round) {
+  const p = Math.max(0, diff() - 1) * 0.08;
+  return Math.floor(p) + (Math.random() < p % 1 ? 1 : 0);
 }
 // how hard the enemy is: grows with wins (classic), level (campaign) or rounds survived (endless)
-function diff() { return G.match === 'campaign' ? G.level - 1 : lives() ? Math.floor((G.mround - 1) / 3) : G.opp; }
+function diff() { return G.match === 'campaign' ? G.level - 1 : lives() ? Math.floor((G.mround - 1) / 4) : G.opp; }
 // endless and survivor: you have 3 lives and the enemy never runs out
 const lives = () => G.match === 'endless' || G.match === 'survivor';
 const VET_MAX = 5, VET_BONUS = 0.08;
@@ -270,14 +348,16 @@ function makeOffer(S, k) {
   const pool = [];
   for (const t of TYPES) {
     const d = UNITS[t];
-    const n = d.add + Math.floor((G.round - 1) / 3) * Math.ceil(d.add / 3);
+    let n = d.add + Math.min(4, Math.floor((G.round - 1) / 3)) * Math.ceil(d.add / 3);   // card size stops growing after round 13
+    if (!(S.army[t] > 0)) n = Math.max(1, Math.min(n, Math.max(ARMY_CAP - count(S), Math.ceil(n / 4))));   // a new unit type still fits under the cap
     const ca = { kind: 'add', id: 'add-' + t, unit: t, n, w: RAR_W[d.rar] };
     const bi = boostInfo(S, ca); if (bi) { ca.boost = true; ca.f = bi.f; ca.pct = bi.pct; }
-    pool.push(ca);
+    if (!(bi && bi.maxed)) pool.push(ca);
     if (d.up && (S.army[t] || 0) > 0 && S.tiers[t] !== 2) pool.push({ kind: 'up', id: 'up-' + t, unit: t, w: UP_W });
   }
   if (G.round >= 2) for (const id in RULES) {
     if (id === 'shields' && S.mods.shields) continue;
+    if ((S.stacks && S.stacks[id] || 0) >= RULE_MAX) continue;   // Battle Cry / War Drums / Gold stack at most 3 times
     pool.push({ kind: 'rule', id, w: RAR_W[RULES[id].rar] });
   }
   const out = [], used = new Set();
@@ -307,43 +387,27 @@ function cardDesc(c) {
   return RULES[c.id].desc;
 }
 function applyCard(S, si, c, fx, fy) {
-  if (c.kind === 'add' && boostInfo(S, c)) {
-    S.pow[c.unit] = (S.pow[c.unit] || 1) * boostInfo(S, c).f;
+  const bi = applyEffect(S, c);
+  if (c.kind === 'add' && bi) {
     for (const e of G.pv[si]) if (e.type === c.unit) e.pop = 1;
   } else if (c.kind === 'add') {
-    S.army[c.unit] = (S.army[c.unit] || 0) + c.n;
-    if (!S.tiers[c.unit]) S.tiers[c.unit] = 1;
     relayout(si, fx, fy);
     if (si === 0) G.stats.maxArmy = Math.max(G.stats.maxArmy, count(S));
   } else if (c.kind === 'up') {
-    S.tiers[c.unit] = 2;
     relayout(si);
     for (const e of G.pv[si]) if (e.type === c.unit) { e.pop = 1; burst(e.tx, e.ty - 16, '#f6c343', 4, 90); }
-  } else {
-    if (c.id === 'shields') S.mods.shields = true;
-    if (c.id === 'battlecry') S.mods.dmg *= 1.15;
-    if (c.id === 'gold') S.coins += 8;
-    if (c.id === 'drums') S.mods.cd *= 0.83;
   }
   floatText(fx, fy - 30, cardTitle(c), si ? '#9cc6ff' : '#ffe08a', si ? 18 : 24);
 }
 
 // ---------- flow ------------------------------------------------------
-function applyQuiet(S, c) {
-  const bi = boostInfo(S, c);
-  if (c.kind === 'add' && bi) S.pow[c.unit] = (S.pow[c.unit] || 1) * bi.f;
-  else if (c.kind === 'add') { S.army[c.unit] = (S.army[c.unit] || 0) + c.n; if (!S.tiers[c.unit]) S.tiers[c.unit] = 1; }
-  else if (c.kind === 'up') S.tiers[c.unit] = 2;
-  else if (c.id === 'shields') S.mods.shields = true;
-  else if (c.id === 'battlecry') S.mods.dmg *= 1.15;
-  else if (c.id === 'drums') S.mods.cd *= 0.83;
-}
+const applyQuiet = applyEffect;
 // the next campaign foe gets an army like yours, plus 8% more soldiers per level
 function enemyCatchUp(rounds) {
   const keep = G.round, target = count(G.P) * (1 + 0.08 * (G.level - 1));
   for (let r = 1; r <= rounds && count(G.E) < target; r++) {
     G.round = r;
-    const picks = 3 + (diff() >= 3 && r % 2 === 0 ? 1 : 0) + (diff() >= 5 ? 1 : 0);
+    const picks = 3 + extraPicks(r);
     for (let k = 0; k < picks; k++) {
       const off = makeOffer(G.E, 3); let best = off[0], bs = -1e9;
       for (const c of off) { const sc = aiScore(c); if (sc > bs) { bs = sc; best = c; } }
@@ -353,7 +417,7 @@ function enemyCatchUp(rounds) {
   }
   G.round = keep;
 }
-const packSide = S => ({ army: S.army, tiers: S.tiers, pow: S.pow, mods: S.mods, coins: S.coins });
+const packSide = S => ({ army: S.army, tiers: S.tiers, pow: S.pow, vet: S.vet, stacks: S.stacks, mods: S.mods, coins: S.coins });
 function newMatch(mode, match) {
   if (['classic', 'campaign', 'endless', 'survivor'].includes(match)) G.match = match;
   if (mode === 'auto' || mode === 'cmd') G.mode = mode;
@@ -365,13 +429,27 @@ function newMatch(mode, match) {
   if (G.match === 'campaign') {
     const c = loadCamp();
     G.level = c ? c.level : 1;
-    if (c) { Object.assign(G.P, JSON.parse(JSON.stringify(c.P))); G.P.pow = G.P.pow || {}; G.round = c.round; }
+    if (c) { Object.assign(G.P, JSON.parse(JSON.stringify(c.P))); G.P.pow = G.P.pow || {}; G.P.vet = G.P.vet || {}; G.round = c.round; }
+    G.campTries = c && c.tries != null ? c.tries : 3;
     G.chief = chiefName(G.level - 1);
     G.E.mods.hp = 0.9 + 0.07 * (G.level - 1); G.E.mods.dmg = 0.92 + 0.05 * (G.level - 1);
     enemyCatchUp(G.round - 1);
     relayout(0); relayout(1);
     G.stats.maxArmy = count(G.P);
     if (G.level > 1) showBanner('LEVEL ' + G.level, 'Your army marches on', '#ffe08a', 1.6);
+  }
+  const run = lives() && loadRun();
+  if (run && run.match === G.match) {
+    // continue a saved run
+    Object.assign(G.P, JSON.parse(JSON.stringify(run.P))); Object.assign(G.E, JSON.parse(JSON.stringify(run.E)));
+    for (const S of [G.P, G.E]) { S.pow = S.pow || {}; S.vet = S.vet || {}; }
+    G.mround = run.mround; G.round = run.round; G.lastWinner = run.lastWinner; G.freeRerolls = run.freeRerolls || 0;
+    G.stats = Object.assign(G.stats, run.stats || {});
+    G.chief = G.match === 'survivor' ? 'The New Recruits' : 'The Endless Horde';
+    relayout(0); relayout(1);
+    showBanner('ROUND ' + G.mround, 'Run continued', '#ffe08a', 1.4);
+  } else if (G.match === 'campaign') {
+    // handled above
   } else if (G.match === 'survivor') {
     G.chief = 'The New Recruits';
   } else if (G.match === 'endless') {
@@ -379,21 +457,25 @@ function newMatch(mode, match) {
     G.E.mods.hp = 0.9; G.E.mods.dmg = 0.92;
   } else {
     G.chief = chiefName(G.opp);
-    G.E.mods.hp = 0.9 + 0.08 * G.opp; G.E.mods.dmg = 0.92 + 0.05 * G.opp;
+    G.E.mods.hp = 0.9 + 0.04 * G.opp; G.E.mods.dmg = 0.92 + 0.025 * G.opp;
   }
   startDraft();
 }
 function startDraft() {
   G.mercy = G.lastWinner === 1;
-  if (G.mercy) G.freeRerolls++;
+  if (G.mercy) G.freeRerolls = Math.max(G.freeRerolls, 1);   // a free reroll after a loss (they don't pile up)
+  G.draftNote = G.eased && G.mround === 1 ? 'Two losses in a row: this enemy is a bit easier' : '';
+  if (G.mround === 1) G.eased = false;
   G.pickNo = 0;
   G.picks = G.match === 'survivor' && G.lastWinner === 1 ? 5 : 3;   // rebuild faster after a lost round
+  showTipFor();
   G.basePicks = G.picks; G.bought = 0;
   if (G.match === 'survivor') {
     rebuildEnemy();
     relayout(0);
-    if (G.mround > 1) showBanner(count(G.P) ? `${count(G.P)} SURVIVORS` : 'ARMY LOST', count(G.P) ? 'They fight on' : 'Rebuild with 5 picks', '#ffe08a', 1.5);
+    if (G.mround > 1) G.draftNote = count(G.P) ? `${count(G.P)} survivors fight on` : 'Army lost: rebuild with 5 picks';
   }
+  saveRun();
   nextPick();
 }
 function nextPick() {
@@ -415,8 +497,9 @@ function buyPick() {
   G.P.coins -= extraCost(); G.bought++; G.picks++;
   floatText(225, 640, '+1 CARD THIS ROUND', '#ffe08a', 20);
 }
-function pickCard(i) {
+function pickCard(i, fromTap) {
   if (G.state !== 'draft' || !G.offer[i]) return;
+  if (fromTap && G.draftAge < 0.35) return;   // cards are still appearing: ignore stray taps
   G.picked = { card: G.offer[i], i, n: G.offer.length };
   G.state = 'reveal'; G.revealT = 0;
 }
@@ -446,10 +529,7 @@ function aiScore(c) {
 }
 function aiDraft(lastOfRound) {
   let picks = 1;
-  if (lastOfRound && G.mround > 1) {
-    if (diff() >= 3 && G.round % 2 === 0) picks++;
-    if (diff() >= 5) picks++;
-  }
+  if (lastOfRound && G.mround > 1) picks += extraPicks(G.round);
   for (let p = 0; p < picks; p++) later(0.12 + p * 0.22, () => {
     const off = makeOffer(G.E, G.lastWinner === 0 ? 4 : 3);
     let best = off[0], bs = -1e9;
@@ -507,6 +587,7 @@ function nearestEnemyTo(side, x, y, R) {
   return best;
 }
 function startBattle() {
+  if (G.mode === 'cmd') tip('cmd');
   if (G.state !== 'formation') return;
   G.units = []; G.proj = []; G.fx = [];
   for (const si of [0, 1]) {
@@ -532,21 +613,26 @@ function startBattle() {
 }
 
 function endRound(w) {
-  G.lastWinner = w; G.state = 'result'; G.rt = 1.9;
+  G.lastWinner = w; G.state = 'result'; G.rt = 3.2;
   const P = G.P, E = G.E;
   if (w === 0 && lives()) {
     G.stats.roundsWon++;
     const life = G.stats.roundsWon % 5 === 0 && P.wreaths < 3;
     if (life) P.wreaths++;
-    showBanner('YOU WIN!', life ? '+1 wreath back!' : `${G.stats.roundsWon} rounds survived`, '#ffe08a', 1.8); G.thumb = { up: true, t: 0 };
+    showBanner('YOU WIN!', life ? '+1 wreath back!' : `${G.stats.roundsWon} rounds survived`, '#ffe08a', 3.1); G.thumb = { up: true, t: 0 };
   }
-  else if (w === 0) { E.wreaths--; G.stats.roundsWon++; showBanner('YOU WIN!', 'Round won', '#ffe08a', 1.8); G.thumb = { up: true, t: 0 }; }
-  else if (w === 1) { P.wreaths--; showBanner('YOU LOSE', 'You lost a wreath', '#ff8a7a', 1.8); G.thumb = { up: false, t: 0 }; }
-  else { showBanner('DRAW', 'Nobody loses a wreath', '#f3e6c8', 1.8); G.thumb = null; }
+  else if (w === 0) { E.wreaths--; G.stats.roundsWon++; showBanner('YOU WIN!', 'Round won', '#ffe08a', 3.1); G.thumb = { up: true, t: 0 }; }
+  else if (w === 1) { P.wreaths--; showBanner('YOU LOSE', 'You lost a wreath', '#ff8a7a', 3.1); G.thumb = { up: false, t: 0 }; }
+  else { showBanner('DRAW', 'Nobody loses a wreath', '#f3e6c8', 3.1); G.thumb = null; }
   const surv = G.units.filter(u => !u.dead && u.side === 0);
-  // interest: +1 coin for every 10 you are holding (max +5), so saving pays off
-  const interest = Math.min(5, Math.floor(P.coins / 10));
-  const gain = (w === 0 ? 3 + Math.min(6, Math.ceil(surv.length / 4)) : w === 1 ? 5 : 3) + interest;
+  // interest: +1 coin for every 5 you are holding (max +4), so saving pays off
+  const interest = Math.min(4, Math.floor(P.coins / 5));
+  const keepBonus = w === 0 ? Math.min(6, Math.ceil(surv.length / 4)) : 0;   // more survivors, more coins
+  const base = w === 0 ? 5 : 4;
+  const gain = base + keepBonus + interest;
+  const why = G.bt > 44.9 ? 'Time up: decided on remaining HP'
+    : w === 0 ? `${surv.length} of your soldiers still standing` : w === 1 ? 'Your fighters were wiped out' : 'Both sides worn down';
+  G.resultNote = [why, `+${base} coins${keepBonus ? ` · +${keepBonus} for survivors` : ''}${interest ? ` · +${interest} interest` : ''}`];
   P.coins += gain;
   if (interest) later(1.0, () => floatText(COIN_POS.x + 70, COIN_POS.y - 52, `+${interest} interest`, '#8fd068', 16));
   for (let i = 0; i < Math.min(gain + 3, 12); i++) {
@@ -561,35 +647,48 @@ function keepSurvivors(surv) {
   const P = G.P, n = {};
   for (const u of surv) n[u.type] = (n[u.type] || 0) + 1;
   for (const t of TYPES) {
-    if (n[t]) { P.army[t] = n[t]; P.vet[t] = Math.min(VET_MAX, (P.vet[t] || 0) + 1); }
+    if (n[t]) {
+      const keep = n[t] / (P.army[t] || n[t]);
+      if (P.pow[t]) P.pow[t] = Math.max(1, 1 + (P.pow[t] - 1) * keep);   // the extra strength of the fallen is lost too
+      P.army[t] = n[t];
+      P.vet[t] = G.lastWinner === 1 ? (P.vet[t] || 0) : Math.min(VET_MAX, (P.vet[t] || 0) + 1);   // no star for surviving a lost round
+    }
     else { delete P.army[t]; P.vet[t] = 0; delete P.pow[t]; }
   }
   // survivors walk back from where they stood
   G.pv[0] = surv.map(u => ({ type: u.type, tx: u.x, ty: u.y, dx: u.x, dy: u.y, delay: 0, pop: 0, ph: rand(0, 6.28) }));
 }
 function afterResult() {
+  G.banner = null;
   if (G.P.wreaths <= 0 || G.E.wreaths <= 0) endMatch();
   else {
     G.round++; G.mround++;
-    if (G.match === 'endless') { G.E.mods.hp += 0.035; G.E.mods.dmg *= 1.025; }   // the horde grows every round
+    if (G.match === 'endless') { G.E.mods.hp += 0.014; G.E.mods.dmg *= 1.01; }   // the horde grows every round
     startDraft();
   }
 }
 function endMatch() {
   G.won = G.E.wreaths <= 0;
-  G.state = 'matchEnd';
+  G.state = 'matchEnd'; clearRun();
   G.defeated = G.chief;
   if (G.match === 'campaign') {
-    G.won = G.E.wreaths <= 0;
     G.bestLevel = Math.max(G.bestLevel, G.won ? G.level : G.level - 1);
-    if (G.won) saveCamp({ level: G.level + 1, round: G.round + 1, P: packSide(G.P) });
-    else saveCamp(null);
+    if (G.won) saveCamp({ level: G.level + 1, round: G.round + 1, tries: 3, P: packSide(G.P) });
+    else if (G.campTries > 1) {
+      // retry the same level with a quarter of the army gone
+      for (const t in G.P.army) { G.P.army[t] = Math.floor(G.P.army[t] * 0.75); if (!G.P.army[t]) delete G.P.army[t]; }
+      G.campTries--;
+      saveCamp({ level: G.level, round: G.round + 1, tries: G.campTries, P: packSide(G.P) });
+    } else { G.campTries = 0; saveCamp(null); }
   } else if (G.match === 'endless') {
     G.won = false; G.bestEndless = Math.max(G.bestEndless, G.stats.roundsWon);
   } else if (G.match === 'survivor') {
     G.won = false; G.bestSurv = Math.max(G.bestSurv, G.stats.roundsWon);
-  } else if (G.won) { G.streak++; G.best = Math.max(G.best, G.streak); G.opp++; }
-  else G.streak = 0;
+  } else if (G.won) { G.streak++; G.best = Math.max(G.best, G.streak); G.opp++; G.lossRow = 0; }
+  else {
+    G.streak = 0; G.lossRow = (G.lossRow || 0) + 1;
+    if (G.lossRow >= 2 && G.opp > 0) { G.opp--; G.lossRow = 0; G.eased = true; }   // two losses in a row: next enemy is one step easier
+  }
   save();
 }
 
@@ -644,8 +743,8 @@ function separate() {
 }
 
 // true once the front lines are close: the enemy uses its charge then
-function ST_contact() {
-  for (const u of G.units) if (!u.dead && u.side === 1 && u.target && !u.target.dead && Math.abs(u.target.y - u.y) < 60) return true;
+function ST_contact(si = 1) {
+  for (const u of G.units) if (!u.dead && u.side === si && u.target && !u.target.dead && Math.abs(u.target.y - u.y) < 60) return true;
   return false;
 }
 const boostOf = u => G.boost[u.side] > 0 ? 1 : 0;
@@ -653,6 +752,7 @@ function stepBattle(dt) {
   G.bt += dt;
   for (const si of [0, 1]) { G.boost[si] = Math.max(0, G.boost[si] - dt); G.boostCd[si] = Math.max(0, G.boostCd[si] - dt); }
   if (G.mode === 'cmd' && G.boostCd[1] <= 0 && ST_contact()) useCharge(1);
+  if (G.mode === 'cmd' && G.skip && G.boostCd[0] <= 0 && ST_contact(0)) useCharge(0);   // when you skip, your charge fires at contact too
   for (const k in G.ord) G.ord[k].t += dt;
   if (((G.bt / dt) | 0) % 30 === 0) G.units = G.units.filter(u => !u.dead);
   const U = G.units;
@@ -1129,7 +1229,9 @@ function sprite(type, side, tier, s, face, atk) {
 }
 function drawFigureFast(g, type, side, tier, x, y, s, o) {
   const face = o.face || 1, atk = o.atk || 0, nb = type === 'catapult' ? 6 : 3;
+  if (SPR.size > 320) SPR.clear();   // keep canvas memory bounded on phones
   const sk = Math.round(s * 20) / 20, sp = sprite(type, side, tier, sk, face, Math.round(atk * nb) / nb);
+  if (o.mul) s *= o.mul;   // pop animation scales the drawn image, not the cached sprite
   const bob = o.walk ? -Math.abs(Math.sin(o.walk * 11)) * 2.2 * s : (o.bob || 0);
   const lunge = (type === 'catapult' || type === 'healer') ? 0 : atk * 3.5 * s;
   g.drawImage(sp.c, x - sp.ax * s + lunge * face, y - sp.ay * s + bob, sp.w * s, sp.h * s);
@@ -1360,16 +1462,16 @@ function drawCard(g, c, x, y, w, h) {
   for (let i = 0; i < teeth; i++) { g.lineTo(x + 5 + tw * (i + 0.5), y + ah - 2); g.lineTo(x + 5 + tw * (i + 1), y + ah + 5); }
   g.lineTo(x + w - 5, y + ah + 9); g.lineTo(x + 5, y + ah + 9); g.closePath(); fs(g, cc[2]);
   const title = cardTitle(c), tmax = w - 14, ty = y + ah + (h - ah) * 0.4;
-  const size = fitSize(g, title, tmax, 19, 11);
+  const size = fitSize(g, title, tmax, 19, 13);
   txt(g, title, x + w / 2, ty, size, '#fff', { lw: 4 });
-  const desc = cardDesc(c), ds = w < 110 ? 10 : 11;
+  const desc = cardDesc(c), ds = w < 110 ? 12 : 13;
   g.font = `400 ${ds}px ${F}`;
   const words = desc.split(' '), lines = [''];
   for (const wd of words) {
     const cur = lines[lines.length - 1], tl = cur ? cur + ' ' + wd : wd;
     if (g.measureText(tl).width > tmax && cur) lines.push(wd); else lines[lines.length - 1] = tl;
   }
-  const L = lines.slice(0, 3);
+  const L = lines.slice(0, 2);
   L.forEach((l, i) => txt(g, l, x + w / 2, y + ah + (h - ah) * 0.74 + (i - (L.length - 1) / 2) * (ds + 2), ds, '#7a5334', { stroke: false }));
   const tag = counterTag(c);
   if (tag) {
@@ -1461,7 +1563,7 @@ function render() {
   drawKing(g);
   drawWorld(g);
   g.restore();
-  drawHUD(g);
+  if (G.state !== 'title') drawHUD(g);
   drawUI(g);
 }
 
@@ -1483,12 +1585,16 @@ function drawWorld(g) {
     }
     if (G.mode === 'cmd' && G.state === 'battle') drawFlags(g);
     for (const u of list) drawFigureFast(g, u.type, u.side, u.tier, u.x, u.y, u.s, { face: u.face, walk: u.walk, atk: u.atk, flash: u.flash });
+    // health bars: three fills for all units instead of two per unit
+    const hb = new Path2D(), h0 = new Path2D(), h1 = new Path2D();
     for (const u of list) {
       if (u.hp >= u.maxHp) continue;
       const w = 18 * u.s * (u.type === 'elephant' ? 2 : 1), top = u.y - UNITS[u.type].h * u.s - 5;
-      rr(g, u.x - w / 2, top, w, 4, 2); fs(g, 'rgba(0,0,0,.55)');
-      rr(g, u.x - w / 2, top, w * Math.max(0, u.hp / u.maxHp), 4, 2); fs(g, u.side ? '#6fb1ff' : '#ff6b5a');
+      hb.rect(u.x - w / 2, top, w, 4);
+      (u.side ? h1 : h0).rect(u.x - w / 2, top, w * Math.max(0, u.hp / u.maxHp), 4);
     }
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fill(hb);
+    g.fillStyle = '#ff6b5a'; g.fill(h0); g.fillStyle = '#6fb1ff'; g.fill(h1);
     for (const p of G.proj) {
       if (p.k === 'arrow') {
         line(g, p.x - p.vx * 12, p.y - p.vy * 12, p.x, p.y, '#6b3f1d', 1.8);
@@ -1504,8 +1610,8 @@ function drawWorld(g) {
     for (const si of [0, 1]) for (const e of G.pv[si]) if (e.delay <= 0) items.push([e, si]);
     items.sort((a, b) => a[0].dy - b[0].dy);
     for (const [e, si] of items) {
-      const S = sideOf(si), s = scaleOf(S, e.type) * (1 + (e.pop > 0 ? Math.sin(e.pop * Math.PI) * 0.35 : 0));
-      drawFigureFast(g, e.type, si, S.tiers[e.type] || 1, e.dx, e.dy, s, { face: si ? -1 : 1, bob: Math.sin(G.t * 3 + e.ph) * 0.6 });
+      const S = sideOf(si), s = scaleOf(S, e.type), mul = 1 + (e.pop > 0 ? Math.sin(e.pop * Math.PI) * 0.35 : 0);
+      drawFigureFast(g, e.type, si, S.tiers[e.type] || 1, e.dx, e.dy, s, { face: si ? -1 : 1, bob: Math.sin(G.t * 3 + e.ph) * 0.6, mul });
     }
   }
   for (const p of G.parts) {
@@ -1538,9 +1644,9 @@ function armyLine(S) {
 function drawUI(g) {
   const st = G.state;
   if (G.P && st !== 'title') {
-    rr(g, 14, 928, 104, 36, 18); fs(g, 'rgba(43,29,22,.78)', OUT, 2);
-    coinIcon(g, COIN_POS.x, COIN_POS.y, 11);
-    txt(g, String(G.P.coins), 56, 947, 20, '#ffe08a', { align: 'left' });
+    rr(g, 12, 118, 104, 30, 15); fs(g, 'rgba(43,29,22,.78)', OUT, 2);
+    coinIcon(g, COIN_POS.x, COIN_POS.y, 10);
+    txt(g, String(G.P.coins), 50, 134, 18, '#ffe08a', { align: 'left' });
   }
   if (st === 'draft' || st === 'reveal') drawDraft(g);
   if (st === 'formation' || st === 'landing') {
@@ -1559,10 +1665,16 @@ function drawUI(g) {
   if (st === 'battle' || st === 'result') drawStrength(g);
   if (st === 'battle') {
     if (G.mode === 'cmd') drawCommandBar(g);
-    button(g, 236, 926, 98, 38, 'SKIP ▸▸', skipBattle, { size: 15, c1: '#ffcf5a', c2: '#d9921c', enabled: !G.ending });
-    button(g, 340, 926, 98, 38, 'SPEED x' + G.speed, cycleSpeed, { size: 15, c1: '#6aa6f0', c2: '#2f64b3' });
+    const cm = G.mode === 'cmd', bw = cm ? 134 : 206, sx = cm ? 158 : 14;
+    button(g, sx, 902, bw, 56, 'SKIP ▸▸', skipBattle, { size: 20, c1: '#ffcf5a', c2: '#d9921c', enabled: !G.ending });
+    button(g, sx + bw + 10, 902, bw, 56, 'SPEED x' + G.speed, cycleSpeed, { size: 20, c1: '#6aa6f0', c2: '#2f64b3' });
   }
-  if (st === 'result' && G.rt < 1.6) {
+  if (st === 'result' && G.resultNote) {
+    rr(g, 40, MID + 74, 370, 54, 16); fs(g, 'rgba(43,29,22,.8)');
+    txt(g, G.resultNote[0], 225, MID + 92, fitSize(g, G.resultNote[0], 350, 15, 10), '#fdf1dc', { stroke: false });
+    txt(g, G.resultNote[1], 225, MID + 113, fitSize(g, G.resultNote[1], 350, 14, 9), '#ffe08a', { stroke: false });
+  }
+  if (st === 'result' && G.rt < 2.9) {
     g.save(); g.globalAlpha = 0.55 + Math.sin(G.t * 6) * 0.3;
     txt(g, 'tap to continue', 225, 890, 16, '#fff', { lw: 4 }); g.restore();
   }
@@ -1574,6 +1686,7 @@ function drawUI(g) {
     if (b.sub) txt(g, b.sub, 0, 46, 20, '#fff', { lw: 5 });
     g.restore();
   }
+  if (st !== 'title' && st !== 'matchEnd') drawTip(g);
   if (st === 'title') drawTitle(g);
   if (st === 'matchEnd') drawMatchEnd(g);
 }
@@ -1596,16 +1709,17 @@ function drawFlags(g) {
 }
 function drawCommandBar(g) {
   const chips = GROUPS.map((gr, i) => i).filter(i => i === 0 || groupAlive(i));
+  G.chipList = chips;
   if (!chips.includes(G.sel)) G.sel = 0;
   const n = chips.length + 1, gap = 6, w = (422 - gap * (n - 1)) / n;
   chips.forEach((gi, k) => {
     const on = gi === G.sel, x = 14 + k * (w + gap);
-    button(g, x, 852, w, 36, GROUPS[gi].name, () => { G.sel = gi; }, { size: fitSize(g, GROUPS[gi].name, w - 14, 14, 9), c1: on ? '#8fd068' : '#7a5a44', c2: on ? '#3f8f3a' : '#4a3426' });
+    button(g, x, 846, w, 48, GROUPS[gi].name, () => { G.sel = gi; }, { size: fitSize(g, GROUPS[gi].name, w - 14, 14, 9), c1: on ? '#8fd068' : '#7a5a44', c2: on ? '#3f8f3a' : '#4a3426' });
   });
-  button(g, 14 + chips.length * (w + gap), 852, w, 36, 'FREE', freeGroup, { size: fitSize(g, 'FREE', w - 14, 14, 9), c1: '#c9b08a', c2: '#8a6a4a' });
+  button(g, 14 + chips.length * (w + gap), 846, w, 48, 'FREE', freeGroup, { size: fitSize(g, 'FREE', w - 14, 14, 9), c1: '#c9b08a', c2: '#8a6a4a' });
   const cd = G.boostCd[0], act = G.boost[0] > 0;
-  button(g, 124, 926, 106, 38, act ? 'GO GO!' : cd > 0 ? 'CHARGE ' + Math.ceil(cd) : 'CHARGE!', () => useCharge(0), { size: 15, enabled: cd <= 0, c1: '#ff6a4d', c2: '#c42d1f' });
-  if (cd > 0 && !act) { rr(g, 132, 958, 90 * (1 - cd / BOOST_CD), 3, 1.5); fs(g, '#ffe08a'); }
+  button(g, 14, 902, 134, 56, act ? 'GO GO!' : cd > 0 ? 'CHARGE ' + Math.ceil(cd) : 'CHARGE!', () => useCharge(0), { size: 20, enabled: cd <= 0, c1: '#ff6a4d', c2: '#c42d1f' });
+  if (cd > 0 && !act) { rr(g, 24, 950, 114 * (1 - cd / BOOST_CD), 4, 2); fs(g, '#ffe08a'); }
   if (G.bt < 4.5 && !Object.keys(G.ord).length) {
     g.save(); g.globalAlpha = 0.6 + Math.sin(G.t * 5) * 0.3;
     rr(g, 70, 760, 310, 30, 15); fs(g, 'rgba(43,29,22,.75)');
@@ -1617,13 +1731,21 @@ function drawStrength(g) {
   let h0 = 0, h1 = 0, n0 = 0, n1 = 0;
   for (const u of G.units) { if (u.dead) continue; if (u.side) { h1 += u.hp; n1++; } else { h0 += u.hp; n0++; } }
   const tot = h0 + h1, q = tot > 0 ? h0 / tot : 0.5;
-  rr(g, 14, 810, 422, 34, 14); fs(g, 'rgba(43,29,22,.8)');
-  const bx = 60, bw = 330, by = 821;
+  rr(g, 14, 804, 422, 34, 14); fs(g, 'rgba(43,29,22,.8)');
+  const bx = 60, bw = 330, by = 815;
   rr(g, bx, by, bw, 12, 6); fs(g, '#3b7dd8');
   if (q > 0.01) { rr(g, bx, by, bw * q, 12, 6); fs(g, '#e0453b'); }
   rr(g, bx, by, bw, 12, 6); g.strokeStyle = OUT; g.lineWidth = 2; g.stroke();
-  txt(g, String(n0), 37, 828, 16, '#ff9b8f', { lw: 3 });
-  txt(g, String(n1), 413, 828, 16, '#9cc6ff', { lw: 3 });
+  txt(g, String(n0), 37, 822, 16, '#ff9b8f', { lw: 3 });
+  txt(g, String(n1), 413, 822, 16, '#9cc6ff', { lw: 3 });
+}
+// one line about the enemy army so you can counter-pick while drafting
+function enemySummary() {
+  const E = G.E, n = count(E);
+  if (!n) return 'Enemy: no army yet';
+  const top = ORDER.filter(t => E.army[t]).sort((a, b) => E.army[b] - E.army[a]);
+  const parts = top.slice(0, 3).map(t => `${UNITS[t].plural} ${E.army[t]}${E.tiers[t] === 2 ? '↑' : ''}`);
+  return `Enemy ${n}: ${parts.join(' · ')}${top.length > 3 ? ` +${top.length - 3} more` : ''}`;
 }
 function drawDraft(g) {
   g.fillStyle = 'rgba(30,15,8,.4)'; g.fillRect(AR.x - 16, AR.y - 16, AR.w + 32, AR.h + 32);
@@ -1636,7 +1758,10 @@ function drawDraft(g) {
   if (G.state === 'draft') {
     rr(g, 60, by + 16, 330, 56, 28); fs(g, '#fdf1dc', OUT, 3);
     txt(g, G.mercy ? 'COMEBACK BONUS!' : 'PICK A CARD', 225, by + 38, 26, G.mercy ? '#2458a8' : '#b3281f', { stroke: false });
-    txt(g, G.mercy ? 'You lost the round: 4 choices + a free reroll' : 'Build your army', 225, by + 59, 12, '#8a6a4a', { stroke: false });
+    const sub = G.draftNote || (G.mercy ? 'You lost the round: 4 choices + a free reroll' : 'Build your army');
+    txt(g, sub, 225, by + 59, fitSize(g, sub, 300, 13, 9), '#8a6a4a', { stroke: false });
+    const en = enemySummary();
+    txt(g, en, 225, by + 84, fitSize(g, en, 420, 14, 9), '#ffe08a', { lw: 3 });
     rr(g, 350, by + 4, 56, 28, 12); fs(g, '#f6c343', OUT, 2.5);
     txt(g, `${G.pickNo + 1}/${G.picks}`, 378, by + 18, 17, '#8e1f1a', { stroke: false });
     const slots = draftLayout(G.offer.length);
@@ -1647,7 +1772,7 @@ function drawDraft(g) {
       const im = cardImage(c, s.w, s.h), pd = c._pad;
       g.drawImage(im, s.x - pd, s.y - pd, s.w + pd * 2, s.h + pd * 2 + 6);
       g.restore();
-      G.btns.push({ x: s.x, y: s.y, w: s.w, h: s.h, fn: () => pickCard(i) });
+      G.btns.push({ x: s.x, y: s.y, w: s.w, h: s.h, fn: () => pickCard(i, true) });
     });
     const ty = by + 308;
     rr(g, 100, ty, 256, 16, 8); fs(g, 'rgba(0,0,0,.45)', OUT, 2);
@@ -1656,10 +1781,10 @@ function drawDraft(g) {
     circ(g, 92, ty + 8, 15); fs(g, '#fdf1dc', OUT, 2.5);
     txt(g, String(Math.ceil(G.draftT)), 92, ty + 9, 15, '#8e1f1a', { stroke: false });
     const free = G.freeRerolls > 0, ec = extraCost();
-    button(g, 30, ty + 32, 190, 46, free ? 'FREE REROLL' : 'REROLL  3', reroll, { enabled: free || G.P.coins >= 3, c1: '#ffcf5a', c2: '#d9921c', size: 19, dx: free ? 0 : -10 });
-    if (!free) coinIcon(g, 191, ty + 55, 9);
-    button(g, 230, ty + 32, 190, 46, `+1 CARD  ${ec}`, buyPick, { enabled: G.P.coins >= ec, c1: '#8fd068', c2: '#3f8f3a', size: 19, dx: -11 });
-    coinIcon(g, 395, ty + 55, 9);
+    button(g, 30, ty + 30, 190, 54, free ? 'FREE REROLL' : 'REROLL  3', reroll, { enabled: free || G.P.coins >= 3, c1: '#ffcf5a', c2: '#d9921c', size: 19, dx: free ? 0 : -10 });
+    if (!free) coinIcon(g, 191, ty + 57, 9);
+    button(g, 230, ty + 30, 190, 54, `+1 CARD  ${ec}`, buyPick, { enabled: G.P.coins >= ec, c1: '#8fd068', c2: '#3f8f3a', size: 19, dx: -11 });
+    coinIcon(g, 395, ty + 57, 9);
   } else if (G.picked) {
     const s = draftLayout(G.picked.n)[G.picked.i];
     const q = easeInOut(Math.min(1, G.revealT / 0.26)), tw = 156, th = 250;
@@ -1691,12 +1816,11 @@ function drawTitle(g) {
   let x = 52;
   lineUp.forEach(([t, s]) => { const w = UNITS[t].space * s; drawFigure(g, t, 0, 1, x + w / 2 - 4, 738, s, { face: 1 }); x += w + 12; });
   const a = 0.6 + Math.sin(G.t * 4) * 0.4;
-  void a;
   const MT = [['classic', 'CLASSIC'], ['campaign', 'CAMPAIGN'], ['endless', 'ENDLESS'], ['survivor', 'SURVIVOR']];
   const mw = (358 - 3 * 6) / 4;
   MT.forEach(([id, label], i) => {
     const on = G.match === id;
-    button(g, 46 + i * (mw + 6), 600, mw, 40, label, () => { G.match = id; save(); }, { size: fitSize(g, label, mw - 12, 15, 9), c1: on ? '#8fd068' : '#7a5a44', c2: on ? '#3f8f3a' : '#4a3426' });
+    button(g, 46 + i * (mw + 6), 596, mw, 48, label, () => { G.match = id; save(); }, { size: fitSize(g, label, mw - 12, 15, 9), c1: on ? '#8fd068' : '#7a5a44', c2: on ? '#3f8f3a' : '#4a3426' });
   });
   button(g, 34, 768, 186, 62, 'AUTO BATTLE', () => newMatch('auto', G.match), { size: 22, c1: '#6aa6f0', c2: '#2f64b3' });
   button(g, 230, 768, 186, 62, 'COMMAND', () => newMatch('cmd', G.match), { size: 24 });
@@ -1704,12 +1828,15 @@ function drawTitle(g) {
   txt(g, 'You lead the army', 323, 848, 13, '#fdf1dc', { lw: 3 });
   if (G.mode) { const mx = G.mode === 'cmd' ? 323 : 127; rr(g, mx - 30, 866, 60, 6, 3); fs(g, '#ffe08a'); }
   let info = '';
-  if (G.match === 'campaign') { const c = G.camp; info = c ? `Saved: level ${c.level}, army of ${Object.values(c.P.army).reduce((a, b) => a + b, 0)}` : (G.bestLevel ? `Best: level ${G.bestLevel}` : 'Start at level 1'); }
+  if (G.match === 'campaign') { const c = G.camp; info = c ? `Saved: level ${c.level}, army of ${Object.values(c.P.army).reduce((a, b) => a + b, 0)}, ${c.tries != null ? c.tries : 3} tries` : (G.bestLevel ? `Best: level ${G.bestLevel}` : 'Start at level 1'); }
+  else if (lives() && G.run && G.run.match === G.match) info = `Run saved at round ${G.run.mround}: tap AUTO or COMMAND to go on`;
   else if (G.match === 'endless') info = G.bestEndless ? `Best: ${G.bestEndless} rounds survived` : 'How long can you last?';
   else if (G.match === 'survivor') info = G.bestSurv ? `Best: ${G.bestSurv} rounds won` : 'Keep your soldiers alive. Veterans get stronger';
+  const hasSave = G.match === 'campaign' ? !!G.camp : lives() && G.run && G.run.match === G.match;
+  if (hasSave) button(g, 160, 916, 130, 40, 'START OVER', () => { if (G.match === 'campaign') saveCamp(null); else clearRun(); }, { size: 15, c1: '#c9b08a', c2: '#8a6a4a' });
   else if (G.opp > 0 || G.best > 0) info = `Next enemy: ${chiefName(G.opp)}   ·   Best streak: ${G.best}`;
   if (info) txt(g, info, 225, 900, 15, '#ffe08a', { lw: 4 });
-  txt(g, 'v' + VERSION, 225, 935, 11, 'rgba(253,241,220,.55)', { stroke: false });
+  txt(g, 'v' + VERSION, 225, 966, 11, 'rgba(253,241,220,.55)', { stroke: false });
 }
 
 function drawMatchEnd(g) {
@@ -1718,7 +1845,7 @@ function drawMatchEnd(g) {
   drawWreath(g, 225, 300, G.won, 0, 3);
   const M = G.match, st = G.stats;
   const head = M === 'endless' || M === 'survivor' ? 'GAME OVER' : G.won ? (M === 'campaign' ? `LEVEL ${G.level} WON` : 'VICTORY!') : 'DEFEAT';
-  const sub = M === 'endless' || M === 'survivor' ? `You won ${st.roundsWon} rounds` : M === 'campaign' ? (G.won ? 'Your army is saved. Next foe is tougher' : `Campaign over at level ${G.level}`) : G.won ? `You beat ${G.defeated}!` : `${G.defeated} won this time`;
+  const sub = M === 'endless' || M === 'survivor' ? `You won ${st.roundsWon} rounds` : M === 'campaign' ? (G.won ? 'Your army is saved. Next foe is tougher' : G.campTries > 0 ? `Retry level ${G.level}: ${G.campTries} ${G.campTries === 1 ? 'try' : 'tries'} left, army -25%` : `Campaign over at level ${G.level}`) : G.won ? `You beat ${G.defeated}!` : `${G.defeated} won this time`;
   txt(g, head, 225, 372, fitSize(g, head, 340, 50, 24), G.won || lives() ? '#ffd34d' : '#ff6a4d', { lw: 8 });
   txt(g, sub, 225, 412, fitSize(g, sub, 330, 18, 11), '#7a5334', { stroke: false });
   const last = M === 'campaign' ? ['Best level', G.bestLevel] : M === 'endless' ? ['Best (rounds)', G.bestEndless] : M === 'survivor' ? ['Best (rounds)', G.bestSurv] : ['Win streak', `${G.streak}  (best ${G.best})`];
@@ -1729,9 +1856,9 @@ function drawMatchEnd(g) {
     txt(g, String(v), 374, y, 18, '#b3281f', { align: 'right', stroke: false });
     if (i < rows.length - 1) line(g, 76, y + 16, 374, y + 16, 'rgba(90,60,30,.18)', 1);
   });
-  const bl = G.match === 'campaign' ? (G.won ? 'NEXT LEVEL' : 'NEW CAMPAIGN') : G.won ? 'NEXT BATTLE' : 'PLAY AGAIN';
+  const bl = G.match === 'campaign' ? (G.won ? 'NEXT LEVEL' : G.campTries > 0 ? 'RETRY LEVEL' : 'NEW CAMPAIGN') : G.won ? 'NEXT BATTLE' : 'PLAY AGAIN';
   button(g, 95, 618, 260, 60, bl, () => newMatch(G.mode, G.match), { size: 26 });
-  button(g, 155, 712, 140, 44, 'MENU', () => { G.state = 'title'; }, { size: 18, c1: '#c9b08a', c2: '#8a6a4a' });
+  button(g, 150, 712, 150, 52, 'MENU', () => { G.state = 'title'; }, { size: 18, c1: '#c9b08a', c2: '#8a6a4a' });
 }
 
 // =====================================================================
@@ -1759,6 +1886,7 @@ function update(dt) {
   for (const f of G.floats) { f.t += dt; f.y -= 28 * dt; }
   G.floats = G.floats.filter(f => f.t < f.life);
   if (G.banner) { G.banner.t += dt; if (G.banner.t > G.banner.life) G.banner = null; }
+  if (G.tip) { G.tip.life = G.tip.life || 7; G.tip.t += dt; if (G.tip.t > G.tip.life) G.tip = null; }
   if (G.thumb) { G.thumb.t += dt; if (G.thumb.t > 2.8) G.thumb = null; }
   for (const si of [0, 1]) for (const e of G.pv[si]) {
     if (e.delay > 0) { e.delay -= dt; if (e.delay <= 0) e.pop = 1; continue; }
@@ -1767,7 +1895,7 @@ function update(dt) {
     e.dx += (e.tx - e.dx) * k; e.dy += (e.ty - e.dy) * k;
   }
   switch (G.state) {
-    case 'draft': G.draftAge += dt; G.draftT -= dt; if (G.draftT <= 0) pickCard(0); break;
+    case 'draft': G.draftAge += dt; G.draftT -= dt; if (G.draftT <= 0) pickCard(Math.floor(Math.random() * G.offer.length)); break;
     case 'reveal': G.revealT += dt; if (G.revealT >= 0.42) finishPick(); break;
     case 'landing': G.landT -= dt; if (G.landT <= 0 && G.timers.length === 0) nextPick(); break;
     case 'formation': G.formT += dt; break;
@@ -1777,15 +1905,23 @@ function update(dt) {
 }
 
 let last = performance.now(), acc = 0;
+let crashes = 0;
 function frame(now) {
+  requestAnimationFrame(frame);   // keep the loop alive even if a frame fails
   const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
-  while (acc >= STEP) {
-    const n = G.state === 'battle' ? G.speed : 1;
-    for (let i = 0; i < n; i++) update(STEP);
-    acc -= STEP;
+  try {
+    while (acc >= STEP) {
+      const n = G.state === 'battle' ? G.speed : 1;
+      for (let i = 0; i < n; i++) update(STEP);
+      acc -= STEP;
+    }
+    render();
+  } catch (e) {
+    acc = 0;
+    console.error(e);
+    // after repeated failures go back to the title screen rather than freezing
+    if (++crashes > 30) { crashes = 0; G.state = 'title'; G.timers = []; G.banner = null; }
   }
-  render();
-  requestAnimationFrame(frame);
 }
 
 // ---------- input -----------------------------------------------------
@@ -1801,7 +1937,7 @@ cv.addEventListener('pointerdown', e => {
     if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { b.fn(); return; }
   }
   if (G.state === 'battle' && G.mode === 'cmd' && p.x > AR.x && p.x < AR.x + AR.w && p.y > AR.y && p.y < AR.y + AR.h) { giveOrder(p.x, p.y); return; }
-  if (G.state === 'result' && G.rt < 1.6) G.rt = 0;
+  if (G.state === 'result' && G.rt < 2.9) G.rt = 0;
 });
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase(), st = G.state;
@@ -1811,7 +1947,7 @@ window.addEventListener('keydown', e => {
   else if (k === 's' && st === 'battle') cycleSpeed();
   else if (k === 'c' && st === 'battle' && G.mode === 'cmd') useCharge(0);
   else if (k === 'f' && st === 'battle' && G.mode === 'cmd') freeGroup();
-  else if (st === 'battle' && G.mode === 'cmd' && k >= '1' && k <= '5' && (+k === 1 || groupAlive(+k - 1))) G.sel = +k - 1;
+  else if (st === 'battle' && G.mode === 'cmd' && k >= '1' && k <= '5' && G.chipList && G.chipList[+k - 1] != null) G.sel = G.chipList[+k - 1];
   else if (k === ' ' || k === 'enter') {
     e.preventDefault();
     if (st === 'title' || st === 'matchEnd') newMatch(G.mode, G.match);
