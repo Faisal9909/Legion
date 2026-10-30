@@ -168,13 +168,13 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { bg
 // ---------- save ------------------------------------------------------
 function loadSave() {
   try { const s = JSON.parse(localStorage.getItem('legionclash.save')); if (s) return s; } catch (e) {}
-  return { best: 0, streak: 0, opp: 0, speed: 2, speedC: 1, mode: 'auto', match: 'classic', bestLevel: 0, bestEndless: 0 };
+  return { best: 0, streak: 0, opp: 0, speed: 2, speedC: 1, mode: 'auto', match: 'classic', bestLevel: 0, bestEndless: 0, bestSurv: 0 };
 }
 // campaign progress (your army between matches) lives on this device only
 function loadCamp() { try { return JSON.parse(localStorage.getItem('legionclash.campaign')) || null; } catch (e) { return null; } }
 function saveCamp(c) { try { if (c) localStorage.setItem('legionclash.campaign', JSON.stringify(c)); else localStorage.removeItem('legionclash.campaign'); } catch (e) {} G.camp = c; }
 function save() {
-  try { localStorage.setItem('legionclash.save', JSON.stringify({ best: G.best, streak: G.streak, opp: G.opp, speed: G.speedA, speedC: G.speedC, mode: G.mode, match: G.match, bestLevel: G.bestLevel, bestEndless: G.bestEndless })); } catch (e) {}
+  try { localStorage.setItem('legionclash.save', JSON.stringify({ best: G.best, streak: G.streak, opp: G.opp, speed: G.speedA, speedC: G.speedC, mode: G.mode, match: G.match, bestLevel: G.bestLevel, bestEndless: G.bestEndless, bestSurv: G.bestSurv })); } catch (e) {}
 }
 
 // ---------- state -----------------------------------------------------
@@ -185,7 +185,7 @@ const G = {
   btns: [], offer: [], draftT: 0, draftMax: 15, draftAge: 0, mercy: false, freeRerolls: 0, pickNo: 0,
   picked: null, revealT: 0, landT: 0, formT: 0, bt: 0, bstart: 0, ending: false, rt: 0, lastWinner: -1,
   banner: null, thumb: null, shake: 0, excite: 0.25, speed: 1, speedA: saved.speed || 2, speedC: saved.speedC || 1, mode: saved.mode || 'auto', skip: false,
-  match: saved.match || 'classic', bestLevel: saved.bestLevel || 0, bestEndless: saved.bestEndless || 0, level: 1, mround: 1, camp: null,
+  match: saved.match || 'classic', bestLevel: saved.bestLevel || 0, bestEndless: saved.bestEndless || 0, bestSurv: saved.bestSurv || 0, picks: 3, level: 1, mround: 1, camp: null,
   sel: 0, ord: {}, boost: [0, 0], boostCd: [0, 0], stats: null, chief: '', defeated: '', won: false,
 };
 G.camp = loadCamp();
@@ -194,7 +194,7 @@ const chiefName = n => CHIEFS[n % CHIEFS.length] + (n >= CHIEFS.length ? ' ' + (
 const count = S => Object.values(S.army).reduce((a, b) => a + b, 0);
 const scaleOf = (S, t) => UNITS[t].size * (S.tiers[t] === 2 ? T2_SIZE : 1);
 function later(t, fn) { G.timers.push({ t, fn }); }
-function newSide() { return { army: {}, tiers: {}, pow: {}, mods: { dmg: 1, hp: 1, cd: 1, shields: false }, wreaths: 3, coins: 0 }; }
+function newSide() { return { army: {}, tiers: {}, pow: {}, vet: {}, mods: { dmg: 1, hp: 1, cd: 1, shields: false }, wreaths: 3, coins: 0 }; }
 // past this many soldiers, a new soldier card makes that unit type stronger instead of bigger
 const ARMY_CAP = 180;
 function boostInfo(S, c) {
@@ -205,7 +205,25 @@ function boostInfo(S, c) {
   return { f, pct: Math.max(1, Math.round((Math.sqrt(f) - 1) * 100)) };
 }
 // how hard the enemy is: grows with wins (classic), level (campaign) or rounds survived (endless)
-function diff() { return G.match === 'campaign' ? G.level - 1 : G.match === 'endless' ? Math.floor((G.mround - 1) / 3) : G.opp; }
+function diff() { return G.match === 'campaign' ? G.level - 1 : lives() ? Math.floor((G.mround - 1) / 3) : G.opp; }
+// endless and survivor: you have 3 lives and the enemy never runs out
+const lives = () => G.match === 'endless' || G.match === 'survivor';
+const VET_MAX = 5, VET_BONUS = 0.08;
+const SURV_GROW = 0.85;
+// survivor mode: the enemy starts from nothing each round and gets a fresh army for this round
+function rebuildEnemy() {
+  const E = newSide(), r = G.mround;
+  E.mods.hp = 0.9 + 0.03 * (r - 1); E.mods.dmg = 0.92 + 0.02 * (r - 1);
+  G.E = E; G.pv[1] = [];
+  // card budget for this round only: grows slowly, so a well-kept army can stay ahead
+  const picks = Math.round(3 + SURV_GROW * (r - 1));
+  for (let i = 0; i < picks; i++) {
+    const off = makeOffer(E, 3); let best = off[0], bs = -1e9;
+    for (const c of off) { const sc = aiScore(c); if (sc > bs) { bs = sc; best = c; } }
+    applyQuiet(E, best);
+  }
+  relayout(1, 225, AR.y + 40);
+}
 
 // ---------- formation -------------------------------------------------
 function formation(S, si) {
@@ -335,7 +353,7 @@ function enemyCatchUp(rounds) {
 }
 const packSide = S => ({ army: S.army, tiers: S.tiers, pow: S.pow, mods: S.mods, coins: S.coins });
 function newMatch(mode, match) {
-  if (match === 'classic' || match === 'campaign' || match === 'endless') G.match = match;
+  if (['classic', 'campaign', 'endless', 'survivor'].includes(match)) G.match = match;
   if (mode === 'auto' || mode === 'cmd') G.mode = mode;
   G.speed = G.mode === 'cmd' ? G.speedC : G.speedA; save();
   G.timers = []; G.parts = []; G.floats = []; G.units = []; G.proj = []; G.fx = []; G.pv = [[], []];
@@ -352,6 +370,8 @@ function newMatch(mode, match) {
     relayout(0); relayout(1);
     G.stats.maxArmy = count(G.P);
     if (G.level > 1) showBanner('LEVEL ' + G.level, 'Your army marches on', '#ffe08a', 1.6);
+  } else if (G.match === 'survivor') {
+    G.chief = 'The New Recruits';
   } else if (G.match === 'endless') {
     G.chief = 'The Endless Horde';
     G.E.mods.hp = 0.9; G.E.mods.dmg = 0.92;
@@ -365,6 +385,12 @@ function startDraft() {
   G.mercy = G.lastWinner === 1;
   if (G.mercy) G.freeRerolls++;
   G.pickNo = 0;
+  G.picks = G.match === 'survivor' && G.lastWinner === 1 ? 5 : 3;   // rebuild faster after a lost round
+  if (G.match === 'survivor') {
+    rebuildEnemy();
+    relayout(0);
+    if (G.mround > 1) showBanner(count(G.P) ? `${count(G.P)} SURVIVORS` : 'ARMY LOST', count(G.P) ? 'They fight on' : 'Rebuild with 5 picks', '#ffe08a', 1.5);
+  }
   nextPick();
 }
 function nextPick() {
@@ -387,9 +413,9 @@ function pickCard(i) {
 function finishPick() {
   applyCard(G.P, 0, G.picked.card, 225, MID + 90);
   G.pickNo++;
-  aiDraft(G.pickNo >= PICKS_PER_ROUND);
+  if (G.match !== 'survivor') aiDraft(G.pickNo >= G.picks);
   G.picked = null;
-  if (G.pickNo < PICKS_PER_ROUND) { G.state = 'landing'; G.landT = 0.4; }
+  if (G.pickNo < G.picks) { G.state = 'landing'; G.landT = 0.4; }
   else { G.state = 'formation'; G.formT = 0; }
 }
 
@@ -477,7 +503,7 @@ function startBattle() {
     const S = sideOf(si);
     for (const e of G.pv[si]) {
       const d = UNITS[e.type], t2 = S.tiers[e.type] === 2, up = t2 ? d.up : {};
-      const pf = Math.sqrt((S.pow && S.pow[e.type]) || 1);
+      const pf = Math.sqrt((S.pow && S.pow[e.type]) || 1) * (1 + VET_BONUS * ((S.vet && S.vet[e.type]) || 0));
       const s = scaleOf(S, e.type), hp = d.hp * (up.hp || 1) * S.mods.hp * pf;
       G.units.push({
         side: si, type: e.type, tier: t2 ? 2 : 1, x: e.tx, y: e.ty, hp, maxHp: hp,
@@ -498,7 +524,7 @@ function startBattle() {
 function endRound(w) {
   G.lastWinner = w; G.state = 'result'; G.rt = 1.9;
   const P = G.P, E = G.E;
-  if (w === 0 && G.match === 'endless') {
+  if (w === 0 && lives()) {
     G.stats.roundsWon++;
     const life = G.stats.roundsWon % 5 === 0 && P.wreaths < 3;
     if (life) P.wreaths++;
@@ -515,6 +541,18 @@ function endRound(w) {
     G.parts.push({ type: 'coin', x0: src.x, y0: src.y - 12, t: -i * 0.07, life: 0.8 });
   }
   later(0.6, () => floatText(COIN_POS.x + 46, COIN_POS.y - 26, '+' + gain, '#ffe08a', 22));
+  if (G.match === 'survivor') keepSurvivors(surv);
+}
+// survivor mode: only the soldiers still standing come back; each surviving type earns a veteran star
+function keepSurvivors(surv) {
+  const P = G.P, n = {};
+  for (const u of surv) n[u.type] = (n[u.type] || 0) + 1;
+  for (const t of TYPES) {
+    if (n[t]) { P.army[t] = n[t]; P.vet[t] = Math.min(VET_MAX, (P.vet[t] || 0) + 1); }
+    else { delete P.army[t]; P.vet[t] = 0; delete P.pow[t]; }
+  }
+  // survivors walk back from where they stood
+  G.pv[0] = surv.map(u => ({ type: u.type, tx: u.x, ty: u.y, dx: u.x, dy: u.y, delay: 0, pop: 0, ph: rand(0, 6.28) }));
 }
 function afterResult() {
   if (G.P.wreaths <= 0 || G.E.wreaths <= 0) endMatch();
@@ -535,6 +573,8 @@ function endMatch() {
     else saveCamp(null);
   } else if (G.match === 'endless') {
     G.won = false; G.bestEndless = Math.max(G.bestEndless, G.stats.roundsWon);
+  } else if (G.match === 'survivor') {
+    G.won = false; G.bestSurv = Math.max(G.bestSurv, G.stats.roundsWon);
   } else if (G.won) { G.streak++; G.best = Math.max(G.best, G.streak); G.opp++; }
   else G.streak = 0;
   save();
@@ -1260,7 +1300,7 @@ function drawHUDRaw(g) {
   rr(g, 12, 76, 122, 36, 18); fs(g, 'rgba(43,29,22,.6)');
   for (let i = 0; i < 3; i++) drawWreath(g, 34 + i * 39, 92, i < G.P.wreaths, 0);
   rr(g, 316, 76, 122, 36, 18); fs(g, 'rgba(43,29,22,.6)');
-  if (G.match === 'endless') txt(g, '∞', 377, 90, 30, '#9cc6ff', { lw: 5 });
+  if (lives()) txt(g, '∞', 377, 90, 30, '#9cc6ff', { lw: 5 });
   else for (let i = 0; i < 3; i++) drawWreath(g, 416 - i * 39, 92, i < G.E.wreaths, 1);
   rr(g, 180, 76, 92, 25, 9); fs(g, '#fbe7c6', OUT, 2);
   const rl = G.match === 'campaign' ? `LV ${G.level} · R${G.mround}` : 'ROUND ' + G.mround;
@@ -1479,7 +1519,7 @@ function drawWorld(g) {
 }
 
 function armyLine(S) {
-  return ORDER.filter(t => S.army[t]).map(t => `${UNITS[t].plural} ${S.army[t]}${S.tiers[t] === 2 ? '↑' : ''}`).join(' · ');
+  return ORDER.filter(t => S.army[t]).map(t => `${UNITS[t].plural} ${S.army[t]}${S.tiers[t] === 2 ? '↑' : ''}${S.vet && S.vet[t] ? ' ★' + S.vet[t] : ''}`).join(' · ');
 }
 
 function drawUI(g) {
@@ -1585,7 +1625,7 @@ function drawDraft(g) {
     txt(g, G.mercy ? 'COMEBACK BONUS!' : 'PICK A CARD', 225, by + 38, 26, G.mercy ? '#2458a8' : '#b3281f', { stroke: false });
     txt(g, G.mercy ? 'You lost the round: 4 choices + a free reroll' : 'Build your army', 225, by + 59, 12, '#8a6a4a', { stroke: false });
     rr(g, 350, by + 4, 56, 28, 12); fs(g, '#f6c343', OUT, 2.5);
-    txt(g, `${G.pickNo + 1}/${PICKS_PER_ROUND}`, 378, by + 18, 17, '#8e1f1a', { stroke: false });
+    txt(g, `${G.pickNo + 1}/${G.picks}`, 378, by + 18, 17, '#8e1f1a', { stroke: false });
     const slots = draftLayout(G.offer.length);
     G.offer.forEach((c, i) => {
       const s = slots[i], age = G.draftAge - i * 0.04, sc = easeOutBack(clamp(age / 0.2, 0, 1));
@@ -1624,7 +1664,7 @@ function drawTitle(g) {
     'Pick 3 cards every round',
     'Add soldiers or power them UP',
     'Watch the fight, or command it',
-    G.match === 'campaign' ? 'Win to keep your army, then go on' : G.match === 'endless' ? '3 lives. The rounds never end' : 'Take all 3 enemy wreaths to win',
+    G.match === 'campaign' ? 'Win to keep your army, then go on' : G.match === 'endless' ? '3 lives. The rounds never end' : G.match === 'survivor' ? 'Only survivors fight on. Foe restarts' : 'Take all 3 enemy wreaths to win',
   ];
   rows.forEach((s, i) => {
     const y = 396 + i * 41;
@@ -1637,10 +1677,11 @@ function drawTitle(g) {
   lineUp.forEach(([t, s]) => { const w = UNITS[t].space * s; drawFigure(g, t, 0, 1, x + w / 2 - 4, 738, s, { face: 1 }); x += w + 12; });
   const a = 0.6 + Math.sin(G.t * 4) * 0.4;
   void a;
-  const MT = [['classic', 'CLASSIC'], ['campaign', 'CAMPAIGN'], ['endless', 'ENDLESS']];
+  const MT = [['classic', 'CLASSIC'], ['campaign', 'CAMPAIGN'], ['endless', 'ENDLESS'], ['survivor', 'SURVIVOR']];
+  const mw = (358 - 3 * 6) / 4;
   MT.forEach(([id, label], i) => {
     const on = G.match === id;
-    button(g, 46 + i * 122, 600, 114, 40, label, () => { G.match = id; save(); }, { size: 16, c1: on ? '#8fd068' : '#7a5a44', c2: on ? '#3f8f3a' : '#4a3426' });
+    button(g, 46 + i * (mw + 6), 600, mw, 40, label, () => { G.match = id; save(); }, { size: fitSize(g, label, mw - 12, 15, 9), c1: on ? '#8fd068' : '#7a5a44', c2: on ? '#3f8f3a' : '#4a3426' });
   });
   button(g, 34, 768, 186, 62, 'AUTO BATTLE', () => newMatch('auto', G.match), { size: 22, c1: '#6aa6f0', c2: '#2f64b3' });
   button(g, 230, 768, 186, 62, 'COMMAND', () => newMatch('cmd', G.match), { size: 24 });
@@ -1650,6 +1691,7 @@ function drawTitle(g) {
   let info = '';
   if (G.match === 'campaign') { const c = G.camp; info = c ? `Saved: level ${c.level}, army of ${Object.values(c.P.army).reduce((a, b) => a + b, 0)}` : (G.bestLevel ? `Best: level ${G.bestLevel}` : 'Start at level 1'); }
   else if (G.match === 'endless') info = G.bestEndless ? `Best: ${G.bestEndless} rounds survived` : 'How long can you last?';
+  else if (G.match === 'survivor') info = G.bestSurv ? `Best: ${G.bestSurv} rounds won` : 'Keep your soldiers alive. Veterans get stronger';
   else if (G.opp > 0 || G.best > 0) info = `Next enemy: ${chiefName(G.opp)}   ·   Best streak: ${G.best}`;
   if (info) txt(g, info, 225, 900, 15, '#ffe08a', { lw: 4 });
 }
@@ -1659,11 +1701,11 @@ function drawMatchEnd(g) {
   rr(g, 40, 250, 370, 450, 24); fs(g, '#fdf1dc', OUT, 4);
   drawWreath(g, 225, 300, G.won, 0, 3);
   const M = G.match, st = G.stats;
-  const head = M === 'endless' ? 'GAME OVER' : G.won ? (M === 'campaign' ? `LEVEL ${G.level} WON` : 'VICTORY!') : 'DEFEAT';
-  const sub = M === 'endless' ? `You survived ${st.roundsWon} rounds` : M === 'campaign' ? (G.won ? 'Your army is saved. Next foe is tougher' : `Campaign over at level ${G.level}`) : G.won ? `You beat ${G.defeated}!` : `${G.defeated} won this time`;
-  txt(g, head, 225, 372, fitSize(g, head, 340, 50, 24), G.won || M === 'endless' ? '#ffd34d' : '#ff6a4d', { lw: 8 });
+  const head = M === 'endless' || M === 'survivor' ? 'GAME OVER' : G.won ? (M === 'campaign' ? `LEVEL ${G.level} WON` : 'VICTORY!') : 'DEFEAT';
+  const sub = M === 'endless' || M === 'survivor' ? `You won ${st.roundsWon} rounds` : M === 'campaign' ? (G.won ? 'Your army is saved. Next foe is tougher' : `Campaign over at level ${G.level}`) : G.won ? `You beat ${G.defeated}!` : `${G.defeated} won this time`;
+  txt(g, head, 225, 372, fitSize(g, head, 340, 50, 24), G.won || lives() ? '#ffd34d' : '#ff6a4d', { lw: 8 });
   txt(g, sub, 225, 412, fitSize(g, sub, 330, 18, 11), '#7a5334', { stroke: false });
-  const last = M === 'campaign' ? ['Best level', G.bestLevel] : M === 'endless' ? ['Best (rounds)', G.bestEndless] : ['Win streak', `${G.streak}  (best ${G.best})`];
+  const last = M === 'campaign' ? ['Best level', G.bestLevel] : M === 'endless' ? ['Best (rounds)', G.bestEndless] : M === 'survivor' ? ['Best (rounds)', G.bestSurv] : ['Win streak', `${G.streak}  (best ${G.best})`];
   const rows = [['Rounds won', st.roundsWon], ['Enemies defeated', st.slain], ['Soldiers lost', st.lost], ['Biggest army', st.maxArmy], last];
   rows.forEach(([k, v], i) => {
     const y = 452 + i * 32;
