@@ -1,0 +1,54 @@
+name: Create repo
+
+# Repo factory: lets Claude create new GitHub repos on request.
+# Triggered manually (workflow_dispatch) from chat or the Actions tab.
+# Needs a secret named REPO_FACTORY_TOKEN (fine-grained token with
+# "Administration: Read and write" on All repositories).
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "New repo name (letters, numbers, . _ -)"
+        required: true
+        type: string
+      visibility:
+        description: "private or public"
+        required: true
+        default: private
+        type: choice
+        options: [private, public]
+      description:
+        description: "Short description (optional)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate and create
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          NAME: ${{ inputs.name }}
+          VISIBILITY: ${{ inputs.visibility }}
+          DESC: ${{ inputs.description }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::Secret REPO_FACTORY_TOKEN is missing."; exit 1
+          fi
+          if ! [[ "$NAME" =~ ^[A-Za-z0-9._-]{1,100}$ ]]; then
+            echo "::error::Invalid repo name: $NAME"; exit 1
+          fi
+          if gh repo view "$OWNER/$NAME" >/dev/null 2>&1; then
+            echo "::error::$OWNER/$NAME already exists."; exit 1
+          fi
+          gh repo create "$OWNER/$NAME" "--$VISIBILITY" \
+            --description "$DESC" --add-readme
+          echo "Created https://github.com/$OWNER/$NAME" >> "$GITHUB_STEP_SUMMARY"
