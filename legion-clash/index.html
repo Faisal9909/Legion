@@ -386,6 +386,7 @@ function startDraft() {
   if (G.mercy) G.freeRerolls++;
   G.pickNo = 0;
   G.picks = G.match === 'survivor' && G.lastWinner === 1 ? 5 : 3;   // rebuild faster after a lost round
+  G.basePicks = G.picks; G.bought = 0;
   if (G.match === 'survivor') {
     rebuildEnemy();
     relayout(0);
@@ -405,6 +406,13 @@ function reroll() {
   else return;
   G.offer = makeOffer(G.P, G.offer.length); G.draftAge = 0;
 }
+// coins buy extra cards this round; each one costs more. The enemy does not get a matching pick.
+const extraCost = () => 6 + 4 * G.bought;
+function buyPick() {
+  if (G.state !== 'draft' || G.P.coins < extraCost()) return;
+  G.P.coins -= extraCost(); G.bought++; G.picks++;
+  floatText(225, 640, '+1 CARD THIS ROUND', '#ffe08a', 20);
+}
 function pickCard(i) {
   if (G.state !== 'draft' || !G.offer[i]) return;
   G.picked = { card: G.offer[i], i, n: G.offer.length };
@@ -413,7 +421,7 @@ function pickCard(i) {
 function finishPick() {
   applyCard(G.P, 0, G.picked.card, 225, MID + 90);
   G.pickNo++;
-  if (G.match !== 'survivor') aiDraft(G.pickNo >= G.picks);
+  if (G.match !== 'survivor' && G.pickNo <= G.basePicks) aiDraft(G.pickNo >= G.basePicks);
   G.picked = null;
   if (G.pickNo < G.picks) { G.state = 'landing'; G.landT = 0.4; }
   else { G.state = 'formation'; G.formT = 0; }
@@ -534,8 +542,11 @@ function endRound(w) {
   else if (w === 1) { P.wreaths--; showBanner('YOU LOSE', 'You lost a wreath', '#ff8a7a', 1.8); G.thumb = { up: false, t: 0 }; }
   else { showBanner('DRAW', 'Nobody loses a wreath', '#f3e6c8', 1.8); G.thumb = null; }
   const surv = G.units.filter(u => !u.dead && u.side === 0);
-  const gain = w === 0 ? 3 + Math.min(6, Math.ceil(surv.length / 4)) : w === 1 ? 5 : 3;
+  // interest: +1 coin for every 10 you are holding (max +5), so saving pays off
+  const interest = Math.min(5, Math.floor(P.coins / 10));
+  const gain = (w === 0 ? 3 + Math.min(6, Math.ceil(surv.length / 4)) : w === 1 ? 5 : 3) + interest;
   P.coins += gain;
+  if (interest) later(1.0, () => floatText(COIN_POS.x + 70, COIN_POS.y - 52, `+${interest} interest`, '#8fd068', 16));
   for (let i = 0; i < Math.min(gain + 3, 12); i++) {
     const src = surv.length ? pick(surv) : { x: 225, y: MID };
     G.parts.push({ type: 'coin', x0: src.x, y0: src.y - 12, t: -i * 0.07, life: 0.8 });
@@ -1642,9 +1653,11 @@ function drawDraft(g) {
     if (q > 0.02) { rr(g, 100, ty, 256 * q, 16, 8); fs(g, q < 0.25 ? '#ff8a7a' : '#f6c343'); }
     circ(g, 92, ty + 8, 15); fs(g, '#fdf1dc', OUT, 2.5);
     txt(g, String(Math.ceil(G.draftT)), 92, ty + 9, 15, '#8e1f1a', { stroke: false });
-    const free = G.freeRerolls > 0;
-    button(g, 132, ty + 32, 186, 46, free ? 'FREE REROLL' : 'REROLL  3', reroll, { enabled: free || G.P.coins >= 3, c1: '#ffcf5a', c2: '#d9921c', size: 20, dx: free ? 0 : -10 });
-    if (!free) coinIcon(g, 290, ty + 55, 9);
+    const free = G.freeRerolls > 0, ec = extraCost();
+    button(g, 30, ty + 32, 190, 46, free ? 'FREE REROLL' : 'REROLL  3', reroll, { enabled: free || G.P.coins >= 3, c1: '#ffcf5a', c2: '#d9921c', size: 19, dx: free ? 0 : -10 });
+    if (!free) coinIcon(g, 191, ty + 55, 9);
+    button(g, 230, ty + 32, 190, 46, `+1 CARD  ${ec}`, buyPick, { enabled: G.P.coins >= ec, c1: '#8fd068', c2: '#3f8f3a', size: 19, dx: -11 });
+    coinIcon(g, 395, ty + 55, 9);
   } else if (G.picked) {
     const s = draftLayout(G.picked.n)[G.picked.i];
     const q = easeInOut(Math.min(1, G.revealT / 0.26)), tw = 156, th = 250;
@@ -1661,7 +1674,7 @@ function drawTitle(g) {
   rr(g, 46, 366, 358, 222, 22); fs(g, '#fdf1dc', OUT, 3);
   const rows = [
     'Both armies start empty',
-    'Pick 3 cards every round',
+    'Pick 3 cards. Coins buy more',
     'Add soldiers or power them UP',
     'Watch the fight, or command it',
     G.match === 'campaign' ? 'Win to keep your army, then go on' : G.match === 'endless' ? '3 lives. The rounds never end' : G.match === 'survivor' ? 'Only survivors fight on. Foe restarts' : 'Take all 3 enemy wreaths to win',
@@ -1791,6 +1804,7 @@ window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase(), st = G.state;
   if (st === 'draft' && k >= '1' && k <= '4') pickCard(+k - 1);
   else if (st === 'draft' && k === 'r') reroll();
+  else if (st === 'draft' && k === 'b') buyPick();
   else if (k === 's' && st === 'battle') cycleSpeed();
   else if (k === 'c' && st === 'battle' && G.mode === 'cmd') useCharge(0);
   else if (k === 'f' && st === 'battle' && G.mode === 'cmd') freeGroup();
