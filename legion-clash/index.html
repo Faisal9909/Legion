@@ -29,6 +29,8 @@
 <div id="wrap"></div><canvas id="c"></canvas>
 <script>
 'use strict';
+const VERSION = '2026.10.30-6';   // shown on the title screen so you can tell which version is running
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => {});
 
 // =====================================================================
 //  LEGION CLASH
@@ -1707,6 +1709,7 @@ function drawTitle(g) {
   else if (G.match === 'survivor') info = G.bestSurv ? `Best: ${G.bestSurv} rounds won` : 'Keep your soldiers alive. Veterans get stronger';
   else if (G.opp > 0 || G.best > 0) info = `Next enemy: ${chiefName(G.opp)}   ·   Best streak: ${G.best}`;
   if (info) txt(g, info, 225, 900, 15, '#ffe08a', { lw: 4 });
+  txt(g, 'v' + VERSION, 225, 935, 11, 'rgba(253,241,220,.55)', { stroke: false });
 }
 
 function drawMatchEnd(g) {

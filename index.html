@@ -55,6 +55,7 @@
   const APPS = [
     { path: 'legion-clash/', name: 'Legion Clash', desc: 'Build an army card by card, then watch or command the fight', icon: 'legion-clash/apple-touch-icon.png' },
   ];
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   const list = document.getElementById('apps');
   for (const a of APPS) {
     const li = document.createElement('li'); li.className = 'app';
