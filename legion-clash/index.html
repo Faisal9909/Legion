@@ -18,13 +18,15 @@
 <style>
   html, body { margin: 0; height: 100%; background: #2b1d14; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
   /* keep the game clear of the notch, the Dynamic Island and the home bar */
-  #wrap { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  /* #wrap only measures the safe area; the canvas covers the whole screen and the
+     game board is placed inside the safe area, with the arena stands drawn out to the edges */
+  #wrap { position: fixed; inset: 0; box-sizing: border-box; pointer-events: none;
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
-  canvas { display: block; touch-action: none; }
+  canvas { display: block; position: fixed; left: 0; top: 0; touch-action: none; }
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="c"></canvas></div>
+<div id="wrap"></div><canvas id="c"></canvas>
 <script>
 'use strict';
 
@@ -138,17 +140,23 @@ const PAL = [
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
 let scale = 1, dpr = 1, bgCanvas = null;
+// OX/OY: where the 450×975 board starts on screen (CSS px). VX0..VH: the whole screen in board units.
+let OX = 0, OY = 0, VX0 = 0, VY0 = 0, VW = W, VH = H;
 const SPR = new Map();   // figure sprite cache, cleared on resize
 let GEN = 0;             // bumps on resize so cached card images rebuild
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   // fit inside the safe area (notch, Dynamic Island, home bar)
   const wrap = document.getElementById('wrap'), cs = getComputedStyle(wrap);
-  const aw = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  const ah = wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const sw = wrap.clientWidth, sh = wrap.clientHeight;
+  const pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
+  const pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+  const aw = sw - pl - pr, ah = sh - pt - pb;
   scale = Math.min(aw / W, ah / H);
-  cv.style.width = (W * scale) + 'px'; cv.style.height = (H * scale) + 'px';
-  cv.width = Math.round(W * scale * dpr); cv.height = Math.round(H * scale * dpr);
+  OX = pl + (aw - W * scale) / 2; OY = pt + (ah - H * scale) / 2;
+  VX0 = -OX / scale; VY0 = -OY / scale; VW = sw / scale; VH = sh / scale;
+  cv.style.width = sw + 'px'; cv.style.height = sh + 'px';
+  cv.width = Math.round(sw * dpr); cv.height = Math.round(sh * dpr);
   bgCanvas = null;
   SPR.clear(); GEN++;
 }
@@ -1016,31 +1024,41 @@ function drawWreath(g, x, y, on, side, k) {
 // =====================================================================
 //  SCENE
 // =====================================================================
-const crowd = [];
-(function genCrowd() {
+let crowd = [], CR_TUN = new Map(), CR_SKIN = new Map(), CR_HAIR = new Map();
+function groupBy(k) { const o = new Map(); for (const m of crowd) { let a = o.get(m[k]); if (!a) o.set(m[k], a = []); a.push(m); } return o; }
+// rebuilt on resize so the stands reach every edge of the screen
+function genCrowd() {
   const tun = ['#b88a74', '#c9b08a', '#8f9a7a', '#9aa7b8', '#a88fa8', '#c79c6a', '#b36e62', '#7f93a8'];
   const skins = ['#f0c79a', '#dba678', '#b98252', '#f4d5b5', '#8d5a3b'];
   const hairs = ['#3b2a1f', '#6b4527', '#b8612a', '#d9c48f', '#2a1d18'];
+  crowd = [];
   const add = (x, y) => crowd.push({ x, y, tun: pick(tun), skin: pick(skins), hair: pick(hairs), ph: rand(0, 6.28), sp: rand(6, 10), arm: Math.random() < 0.55 });
-  for (let y = 190; y < 800; y += 21) for (const x of [12, 32, 418, 438]) add(x + rand(-2, 2), y + rand(-2, 2));
-  for (let y = 92; y < 160; y += 20) for (let x = 12; x < 150; x += 18) { add(x, y); add(W - x, y); }
-  for (let y = 830; y < 975; y += 21) for (let x = 12; x < W; x += 18) add(x + rand(-2, 2), y);
+  const x0 = VX0 + 8, x1 = VX0 + VW - 8, y1 = VY0 + VH - 6;
+  for (let y = 190; y < 800; y += 21) {
+    for (let x = 32; x >= x0; x -= 20) add(x + rand(-2, 2), y + rand(-2, 2));
+    for (let x = 418; x <= x1; x += 20) add(x + rand(-2, 2), y + rand(-2, 2));
+  }
+  for (let y = 92; y < 160; y += 20) for (let x = 12 - 18 * Math.ceil((12 - x0) / 18); x < 150; x += 18) { add(x, y); add(W - x, y); }
+  for (let y = 830; y < y1; y += 21) for (let x = 12 - 18 * Math.ceil((12 - x0) / 18); x <= x1; x += 18) add(x + rand(-2, 2), y);
   crowd.sort((a, b) => a.y - b.y);
-})();
+  CR_TUN = groupBy('tun'); CR_SKIN = groupBy('skin'); CR_HAIR = groupBy('hair');
+}
 
 function buildBg() {
   const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height;
-  const g = c.getContext('2d'); g.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  genCrowd();
+  const g = c.getContext('2d'); g.setTransform(scale * dpr, 0, 0, scale * dpr, OX * dpr, OY * dpr);
+  const XL = VX0 - 2, XR = VX0 + VW + 2, YT = VY0 - 2, YB = VY0 + VH + 2;
   g.lineJoin = 'round';
-  g.fillStyle = '#b8a07c'; g.fillRect(0, 0, W, H);
-  g.fillStyle = '#9d8563'; g.fillRect(0, 0, W, 80);
-  for (let x = 12; x < W; x += 48) {
+  g.fillStyle = '#b8a07c'; g.fillRect(XL, YT, XR - XL, YB - YT);
+  g.fillStyle = '#9d8563'; g.fillRect(XL, YT, XR - XL, 80 - YT);
+  for (let x = 12 - 48 * Math.ceil((12 - XL) / 48); x < XR; x += 48) {
     g.beginPath(); g.moveTo(x, 80); g.lineTo(x, 46); g.arc(x + 14, 46, 14, Math.PI, 0); g.lineTo(x + 28, 80); g.closePath(); fs(g, '#6a553b');
   }
   g.strokeStyle = 'rgba(80,55,30,.25)'; g.lineWidth = 2;
-  for (let y = 80; y < 172; y += 20) { g.beginPath(); g.moveTo(0, y + 12); g.lineTo(W, y + 12); g.stroke(); }
-  for (let y = 818; y < H; y += 21) { g.beginPath(); g.moveTo(0, y + 12); g.lineTo(W, y + 12); g.stroke(); }
-  for (let y = 180; y < 810; y += 21) { g.beginPath(); g.moveTo(0, y + 12); g.lineTo(44, y + 12); g.moveTo(406, y + 12); g.lineTo(W, y + 12); g.stroke(); }
+  for (let y = 80; y < 172; y += 20) { g.beginPath(); g.moveTo(XL, y + 12); g.lineTo(XR, y + 12); g.stroke(); }
+  for (let y = 818; y < YB; y += 21) { g.beginPath(); g.moveTo(XL, y + 12); g.lineTo(XR, y + 12); g.stroke(); }
+  for (let y = 180; y < 810; y += 21) { g.beginPath(); g.moveTo(XL, y + 12); g.lineTo(44, y + 12); g.moveTo(406, y + 12); g.lineTo(XR, y + 12); g.stroke(); }
   // wall: stone outside, red painted rail inside
   rr(g, AR.x - 16, AR.y - 16, AR.w + 32, AR.h + 32, 30); fs(g, '#8b7355', OUT, 3.5);
   rr(g, AR.x - 9, AR.y - 9, AR.w + 18, AR.h + 18, 24); fs(g, '#d0473c', OUT, 2.5);
@@ -1077,8 +1095,6 @@ function buildBg() {
 }
 
 // batched by colour: ~20 fills per frame instead of ~1,400 separate paths
-const groupBy = k => { const o = new Map(); for (const m of crowd) { let a = o.get(m[k]); if (!a) o.set(m[k], a = []); a.push(m); } return o; };
-const CR_TUN = groupBy('tun'), CR_SKIN = groupBy('skin'), CR_HAIR = groupBy('hair');
 const HA0 = Math.PI * 1.05, HA1 = Math.PI * 1.95, HCX = Math.cos(HA0) * 5.8, HCY = Math.sin(HA0) * 5.8;
 function drawCrowd(g) {
   const ex = G.excite, T = G.t;
@@ -1300,7 +1316,7 @@ function render() {
   const g = ctx;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.drawImage(bgCanvas, 0, 0);
-  g.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  g.setTransform(scale * dpr, 0, 0, scale * dpr, OX * dpr, OY * dpr);
   G.btns = [];
   g.save();
   if (G.shake > 0.1) g.translate(rand(-G.shake, G.shake), rand(-G.shake, G.shake));
@@ -1477,9 +1493,9 @@ function drawDraft(g) {
   const by = 290, bh = 410;
   const band = G.mercy ? ['rgba(59,125,216,.95)', 'rgba(90,154,240,.95)'] : ['rgba(179,40,31,.95)', 'rgba(224,69,59,.95)'];
   const gr = g.createLinearGradient(0, by, 0, by + bh); gr.addColorStop(0, band[0]); gr.addColorStop(0.5, band[1]); gr.addColorStop(1, band[0]);
-  g.fillStyle = gr; g.fillRect(0, by, W, bh);
-  g.fillStyle = OUT; g.fillRect(0, by - 3, W, 3); g.fillRect(0, by + bh, W, 3);
-  g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(0, by, W, 4);
+  g.fillStyle = gr; g.fillRect(VX0, by, VW, bh);
+  g.fillStyle = OUT; g.fillRect(VX0, by - 3, VW, 3); g.fillRect(VX0, by + bh, VW, 3);
+  g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(VX0, by, VW, 4);
   if (G.state === 'draft') {
     rr(g, 60, by + 16, 330, 56, 28); fs(g, '#fdf1dc', OUT, 3);
     txt(g, G.mercy ? 'COMEBACK BONUS!' : 'PICK A CARD', 225, by + 38, 26, G.mercy ? '#2458a8' : '#b3281f', { stroke: false });
@@ -1515,7 +1531,7 @@ function drawDraft(g) {
 }
 
 function drawTitle(g) {
-  g.fillStyle = 'rgba(25,12,6,.55)'; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(25,12,6,.55)'; g.fillRect(VX0, VY0, VW, VH);
   txt(g, 'LEGION', 225, 225, 84, '#ffd34d', { lw: 12 });
   txt(g, 'CLASH', 225, 305, 84, '#ff6a4d', { lw: 12 });
   rr(g, 46, 370, 358, 262, 22); fs(g, '#fdf1dc', OUT, 3);
@@ -1546,7 +1562,7 @@ function drawTitle(g) {
 }
 
 function drawMatchEnd(g) {
-  g.fillStyle = 'rgba(25,12,6,.62)'; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(25,12,6,.62)'; g.fillRect(VX0, VY0, VW, VH);
   rr(g, 40, 250, 370, 450, 24); fs(g, '#fdf1dc', OUT, 4);
   drawWreath(g, 225, 300, G.won, 0, 3);
   txt(g, G.won ? 'VICTORY!' : 'DEFEAT', 225, 372, 50, G.won ? '#ffd34d' : '#ff6a4d', { lw: 8 });
@@ -1620,7 +1636,7 @@ function frame(now) {
 // ---------- input -----------------------------------------------------
 function toL(e) {
   const r = cv.getBoundingClientRect();
-  return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  return { x: (e.clientX - r.left - OX) / scale, y: (e.clientY - r.top - OY) / scale };
 }
 cv.addEventListener('pointerdown', e => {
   e.preventDefault();
