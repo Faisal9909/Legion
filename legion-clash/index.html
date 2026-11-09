@@ -29,7 +29,7 @@
 <div id="wrap"></div><canvas id="c"></canvas>
 <script>
 'use strict';
-const VERSION = '2026.10.30-7';   // shown on the title screen so you can tell which version is running
+const VERSION = '2026.11.09-1';   // shown on the title screen so you can tell which version is running
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => {});
 
 // =====================================================================
@@ -245,7 +245,7 @@ const G = {
   btns: [], offer: [], draftT: 0, draftMax: 15, draftAge: 0, mercy: false, freeRerolls: 0, pickNo: 0,
   picked: null, revealT: 0, landT: 0, formT: 0, bt: 0, bstart: 0, ending: false, rt: 0, lastWinner: -1,
   banner: null, thumb: null, shake: 0, excite: 0.25, speed: 1, speedA: saved.speed || 2, speedC: saved.speedC || 1, mode: saved.mode || 'auto', skip: false,
-  match: saved.match || 'classic', bestLevel: saved.bestLevel || 0, bestEndless: saved.bestEndless || 0, bestSurv: saved.bestSurv || 0, lossRow: saved.lossRow || 0, eased: false, tips: loadTips(), tip: null, chipList: null, draftNote: '', resultNote: null, campTries: 3, run: null, picks: 3, level: 1, mround: 1, camp: null,
+  match: saved.match || 'classic', bestLevel: saved.bestLevel || 0, bestEndless: saved.bestEndless || 0, bestSurv: saved.bestSurv || 0, lossRow: saved.lossRow || 0, eased: false, tips: loadTips(), tip: null, ask: null, chipList: null, draftNote: '', resultNote: null, campTries: 3, run: null, picks: 3, level: 1, mround: 1, camp: null,
   sel: 0, ord: {}, boost: [0, 0], boostCd: [0, 0], stats: null, chief: '', defeated: '', won: false,
 };
 G.camp = loadCamp(); G.run = loadRun();
@@ -1537,9 +1537,70 @@ function button(g, x, y, w, h, label, fn, o) {
   fs(g, gr, OUT, 3);
   rr(g, x + 6, y + 4, w - 12, h * 0.36, h / 3); fs(g, 'rgba(255,255,255,.25)');
   txt(g, label, x + w / 2 + (o.dx || 0), y + h / 2 + 1, o.size || 24, '#fff', { lw: 5 });
+  if (o.icon) navIcon(g, o.icon, x + (o.ix || 22), y + h / 2 + 1, o.is || 1);
   g.restore();
   if (en) G.btns.push({ x, y, w, h, fn });
 }
+// small white icons drawn with paths (the game font has no symbol glyphs)
+function navIcon(g, kind, cx, cy, k) {
+  g.save(); g.translate(cx, cy); g.scale(k, k); g.lineJoin = 'round'; g.lineCap = 'round';
+  g.beginPath();
+  if (kind === 'home') {
+    g.moveTo(-10, -1); g.lineTo(0, -10); g.lineTo(10, -1); g.lineTo(7, -1); g.lineTo(7, 9); g.lineTo(2, 9); g.lineTo(2, 3);
+    g.lineTo(-2, 3); g.lineTo(-2, 9); g.lineTo(-7, 9); g.lineTo(-7, -1); g.closePath();
+  } else {
+    g.moveTo(5, -10); g.lineTo(-6, 0); g.lineTo(5, 10); g.lineTo(5, 4); g.lineTo(10, 4); g.lineTo(10, -4); g.lineTo(5, -4); g.closePath();
+  }
+  g.strokeStyle = OUT; g.lineWidth = 4.5; g.stroke(); g.fillStyle = '#fff'; g.fill();
+  g.restore();
+}
+// ---------- navigation: back to the games list, leave a match, system back gesture ----------
+const TAN = { c1: '#c9b08a', c2: '#8a6a4a' };
+const inMatch = () => ['draft', 'reveal', 'landing', 'formation', 'battle', 'result'].includes(G.state);
+const isTop = () => G.state === 'title';
+function goApps() { location.href = '../'; }
+function toTitle() {
+  G.state = 'title'; G.ask = null; G.timers = []; G.banner = null; G.tip = null; G.units = []; G.proj = []; G.fx = []; G.parts = []; G.floats = [];
+  G.camp = loadCamp(); G.run = loadRun(); navPushed = false;
+}
+function leaveText() {
+  if (G.match === 'campaign') return `You'll replay level ${G.level} later with the army you had at its start`;
+  if (G.match === 'endless' || G.match === 'survivor') return `Your run is saved: you'll continue from the start of round ${G.mround}`;
+  return 'This match ends and your win streak resets';
+}
+function askLeave() {
+  G.ask = { title: 'Leave this match?', sub: leaveText(), no: 'STAY', yes: 'LEAVE', fn: () => {
+    if (G.match === 'classic') { G.streak = 0; save(); }
+    toTitle();
+  } };
+}
+// one step back: in a match -> confirm leaving; match end -> title; title -> games list
+function goBack() {
+  if (G.ask) { G.ask = null; return; }
+  if (inMatch()) askLeave();
+  else if (G.state === 'matchEnd') toTitle();
+  else if (isTop()) goApps();
+}
+function drawAsk(g) {
+  const A = G.ask; if (!A) return;
+  G.btns = [];
+  g.fillStyle = 'rgba(25,12,6,.62)'; g.fillRect(VX0, VY0, VW, VH);
+  const L = wrapLines(g, A.sub, 300, 16), h = 170 + L.length * 22;
+  const y = MID - h / 2;
+  rr(g, 50, y, 350, h, 24); fs(g, '#fdf1dc', OUT, 3);
+  txt(g, A.title, 225, y + 44, fitSize(g, A.title, 310, 30, 18), '#8e1f1a', { stroke: false });
+  L.forEach((l, i) => txt(g, l, 225, y + 82 + i * 22, 16, '#7a5334', { stroke: false }));
+  button(g, 68, y + h - 82, 148, 60, A.no, () => { G.ask = null; }, { size: 22, ...TAN });
+  button(g, 234, y + h - 82, 148, 60, A.yes, () => { const f = A.fn; G.ask = null; f(); }, { size: 22 });
+}
+let navPushed = false;
+function navSync() { if (!isTop() && !navPushed) { try { history.pushState({ lc: 1 }, ''); } catch (e) {} navPushed = true; } if (isTop()) navPushed = false; }
+window.addEventListener('popstate', () => {
+  navPushed = false;
+  if (isTop() && !G.ask) { history.back(); return; }   // nothing left inside the game: leave to the games list
+  goBack();
+  navSync();
+});
 
 // =====================================================================
 //  RENDER
@@ -1689,6 +1750,10 @@ function drawUI(g) {
   if (st !== 'title' && st !== 'matchEnd') drawTip(g);
   if (st === 'title') drawTitle(g);
   if (st === 'matchEnd') drawMatchEnd(g);
+  if (st === 'title') button(g, 12, 10, 134, 62, 'APPS', goApps, { size: 22, dx: 14, icon: 'home', ix: 28, is: 1.1, ...TAN });
+  if (inMatch()) button(g, 328, 108, 112, 60, 'MENU', askLeave, { size: 19, dx: 13, icon: 'back', ix: 24, ...TAN });
+  drawAsk(g);
+  navSync();
 }
 
 function drawFlags(g) {
@@ -1833,7 +1898,7 @@ function drawTitle(g) {
   else if (G.match === 'endless') info = G.bestEndless ? `Best: ${G.bestEndless} rounds survived` : 'How long can you last?';
   else if (G.match === 'survivor') info = G.bestSurv ? `Best: ${G.bestSurv} rounds won` : 'Keep your soldiers alive. Veterans get stronger';
   const hasSave = G.match === 'campaign' ? !!G.camp : lives() && G.run && G.run.match === G.match;
-  if (hasSave) button(g, 160, 916, 130, 40, 'START OVER', () => { if (G.match === 'campaign') saveCamp(null); else clearRun(); }, { size: 15, c1: '#c9b08a', c2: '#8a6a4a' });
+  if (hasSave) button(g, 150, 912, 150, 48, 'START OVER', () => { if (G.match === 'campaign') saveCamp(null); else clearRun(); }, { size: 15, c1: '#c9b08a', c2: '#8a6a4a' });
   else if (G.opp > 0 || G.best > 0) info = `Next enemy: ${chiefName(G.opp)}   ·   Best streak: ${G.best}`;
   if (info) txt(g, info, 225, 900, 15, '#ffe08a', { lw: 4 });
   txt(g, 'v' + VERSION, 225, 966, 11, 'rgba(253,241,220,.55)', { stroke: false });
@@ -1858,13 +1923,14 @@ function drawMatchEnd(g) {
   });
   const bl = G.match === 'campaign' ? (G.won ? 'NEXT LEVEL' : G.campTries > 0 ? 'RETRY LEVEL' : 'NEW CAMPAIGN') : G.won ? 'NEXT BATTLE' : 'PLAY AGAIN';
   button(g, 95, 618, 260, 60, bl, () => newMatch(G.mode, G.match), { size: 26 });
-  button(g, 150, 712, 150, 52, 'MENU', () => { G.state = 'title'; }, { size: 18, c1: '#c9b08a', c2: '#8a6a4a' });
+  button(g, 140, 712, 170, 56, 'MENU', toTitle, { size: 20, dx: 12, icon: 'back', ix: 26, ...TAN });
 }
 
 // =====================================================================
 //  UPDATE & LOOP
 // =====================================================================
 function update(dt) {
+  if (G.ask) return;   // dialog open: everything waits
   G.t += dt;
   if (G.timers.length) {
     const ts = G.timers; G.timers = [];
@@ -1936,11 +2002,14 @@ cv.addEventListener('pointerdown', e => {
     const b = G.btns[i];
     if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { b.fn(); return; }
   }
+  if (G.ask) return;
   if (G.state === 'battle' && G.mode === 'cmd' && p.x > AR.x && p.x < AR.x + AR.w && p.y > AR.y && p.y < AR.y + AR.h) { giveOrder(p.x, p.y); return; }
   if (G.state === 'result' && G.rt < 2.9) G.rt = 0;
 });
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase(), st = G.state;
+  if (k === 'escape') { goBack(); return; }
+  if (G.ask) { if (k === 'enter') { const f = G.ask.fn; G.ask = null; f(); } return; }
   if (st === 'draft' && k >= '1' && k <= '4') pickCard(+k - 1);
   else if (st === 'draft' && k === 'r') reroll();
   else if (st === 'draft' && k === 'b') buyPick();
@@ -1959,7 +2028,7 @@ window.addEventListener('keydown', e => {
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
 // exposed for automated testing
-window.LEGIO = { G, pickCard, startBattle, newMatch, skipBattle, giveOrder, useCharge };
+window.LEGIO = { G, pickCard, startBattle, newMatch, skipBattle, giveOrder, useCharge, goBack, toTitle };
 
 requestAnimationFrame(frame);
 </script>

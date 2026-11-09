@@ -262,7 +262,7 @@ const G = {
   state: 'menu', t: 0, time: 0, mapI: 0, endless: false, prog: saved.maps, speed: saved.speed, auto: saved.auto,
   gold: 0, hearts: 0, wave: 0, queue: [], enemies: [], towers: [], soldiers: [], proj: [], fx: [], parts: [], floats: [],
   btns: [], sel: null, selTile: null, pick: null, banner: null, shake: 0, autoT: 0, waveActive: false, heartFlash: 0,
-  stats: null, fast: false, result: null,
+  stats: null, fast: false, result: null, confirm: null,
 };
 setupMap(0);
 
@@ -272,7 +272,7 @@ function newGame(mi, endless) {
   G.queue = []; G.enemies = []; G.towers = []; G.soldiers = []; G.proj = []; G.fx = []; G.parts = []; G.floats = [];
   G.sel = null; G.selTile = null; G.pick = null; G.autoT = 0; G.waveActive = false; G.result = null;
   G.stats = { kills: 0, leaked: 0, earned: 0, built: 0 };
-  G.state = 'play';
+  G.state = 'play'; G.confirm = null;
   showBanner(MAPS[mi].name.toUpperCase(), endless ? 'Endless: how long can you hold?' : `Hold for ${MAPS[mi].waves} waves`, '#ffe08a', 2);
 }
 const maxWave = () => G.endless ? Infinity : MAPS[G.mapI].waves;
@@ -1233,10 +1233,36 @@ function drawHUD(g) {
   txt(g, 'WAVE', 278, 23, 11, '#8a6a4a', { stroke: false });
   const wl = G.endless ? `${G.wave}` : `${G.wave}/${MAPS[G.mapI].waves}`;
   txt(g, wl, 278, 40, fitSize(g, wl, 92, 20, 12), '#8e1f1a', { stroke: false });
-  button(g, 336, 12, 50, 40, 'x' + G.speed, cycleSpeed, { size: 18, ...BTN_BLUE });
-  button(g, 392, 12, 48, 40, '', () => { if (G.state === 'play') G.state = 'paused'; }, BTN_TAN);
-  rr(g, 406, 23, 6, 18, 2); fs(g, '#fff', OUT, 1.6); rr(g, 418, 23, 6, 18, 2); fs(g, '#fff', OUT, 1.6);
+  button(g, 334, 8, 52, 52, 'x' + G.speed, cycleSpeed, { size: 19, ...BTN_BLUE });
+  // pause: the way out of a map (resume / restart / quit live in the pause menu)
+  button(g, 390, 8, 52, 52, '', pauseGame, BTN_TAN);
+  pauseIcon(g, 416, 34, 1);
 }
+function pauseIcon(g, cx, cy, k) {
+  rr(g, cx - 10 * k, cy - 12 * k, 7.5 * k, 24 * k, 2); fs(g, '#fff', OUT, 2);
+  rr(g, cx + 2.5 * k, cy - 12 * k, 7.5 * k, 24 * k, 2); fs(g, '#fff', OUT, 2);
+}
+// a small house drawn with paths (the game font has no icon glyphs)
+function houseIcon(g, cx, cy, k) {
+  g.save(); g.translate(cx, cy); g.scale(k, k); g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(-13, -1); g.lineTo(0, -13); g.lineTo(13, -1); g.lineTo(9, -1); g.lineTo(9, 12); g.lineTo(-9, 12); g.lineTo(-9, -1); g.closePath();
+  fs(g, '#fff', OUT, 2.4);
+  rr(g, -3.5, 3, 7, 9, 1.5); fs(g, '#8a6a4a');
+  g.restore();
+}
+// an X drawn with paths, for panel close buttons
+function closeIcon(g, cx, cy, r) {
+  g.lineCap = 'round';
+  line(g, cx - r, cy - r, cx + r, cy + r, OUT, 7); line(g, cx + r, cy - r, cx - r, cy + r, OUT, 7);
+  line(g, cx - r, cy - r, cx + r, cy + r, '#fff', 3.6); line(g, cx + r, cy - r, cx - r, cy + r, '#fff', 3.6);
+}
+// a close button for the bottom panels; the tap area is larger than the drawing
+function panelClose(g, y0, fn) {
+  button(g, 388, y0 + 4, 46, 34, '', fn, BTN_TAN);
+  closeIcon(g, 411, y0 + 21, 7);
+  G.btns.push({ x: 380, y: y0 - 8, w: 70, h: 48, fn });
+}
+function pauseGame() { if (G.state === 'play') { G.state = 'paused'; G.confirm = null; } }
 function cycleSpeed() { G.speed = G.speed >= 3 ? 1 : G.speed + 1; save(); }
 
 function enemyChips(g, wd, x0, y, maxW) {
@@ -1268,11 +1294,11 @@ function drawPanel(g) {
   } else txt(g, 'LAST WAVE!', 24, y0 + 18, 16, '#c42d1f', { align: 'left', stroke: false });
   const can = canCall(), early = can && G.enemies.some(e => !e.dead);
   const pulse = can && !early && !G.autoT ? 1 + Math.sin(G.t * 5) * 0.03 : 1;
-  g.save(); g.translate(352, y0 + 52); g.scale(pulse, pulse); g.translate(-352, -(y0 + 52));
+  g.save(); g.translate(352, y0 + 49); g.scale(pulse, pulse); g.translate(-352, -(y0 + 49));
   const label = !can ? (G.wave >= maxWave() ? 'FINAL WAVE' : 'INCOMING') : early ? 'CALL EARLY' : G.autoT > 0 ? 'NEXT ' + Math.ceil(G.autoT) : G.wave === 0 ? 'START!' : 'NEXT WAVE';
-  button(g, 268, y0 + 22, 164, 60, label, startWave, { enabled: can, size: fitSize(g, label, 140, 24, 14), ...(early ? BTN_GOLD : BTN_GREEN) });
+  button(g, 268, y0 + 14, 164, 66, label, startWave, { enabled: can, size: fitSize(g, label, 140, 24, 14), ...(early ? BTN_GOLD : BTN_GREEN) });
   g.restore();
-  button(g, 268, y0 + 94, 164, 40, G.auto ? 'AUTO: ON' : 'AUTO: OFF', () => { G.auto = !G.auto; if (G.auto && !G.waveActive && canCall() && G.wave > 0) G.autoT = 3; if (!G.auto) G.autoT = 0; save(); }, { size: 17, ...(G.auto ? BTN_BLUE : BTN_DARK) });
+  button(g, 268, y0 + 92, 164, 52, G.auto ? 'AUTO: ON' : 'AUTO: OFF', () => { G.auto = !G.auto; if (G.auto && !G.waveActive && canCall() && G.wave > 0) G.autoT = 3; if (!G.auto) G.autoT = 0; save(); }, { size: 17, ...(G.auto ? BTN_BLUE : BTN_DARK) });
   const hint = G.towers.length ? 'Tap a tower to upgrade or sell it' : 'Tap any grass tile to build a tower';
   txt(g, hint, 24, y0 + 120, fitSize(g, hint, 236, 13, 9), '#8a6a4a', { align: 'left', stroke: false });
   if (G.wave === 0 && !G.towers.length) {
@@ -1292,11 +1318,11 @@ function statLine(type, L) {
 }
 function drawBuildPanel(g, st, y0) {
   rr(g, 10, y0, 430, 156, 16); fs(g, 'rgba(253,241,220,.96)', OUT, 3);
-  txt(g, G.pick ? 'Tap again to build' : 'Build a tower', 24, y0 + 17, 15, '#4a2f1d', { align: 'left', stroke: false });
-  button(g, 400, y0 + 4, 34, 28, '✕', () => { G.selTile = null; G.pick = null; }, { size: 15, ...BTN_TAN });
+  txt(g, G.pick ? 'Tap again to build' : 'Build a tower', 24, y0 + 22, 15, '#4a2f1d', { align: 'left', stroke: false });
+  panelClose(g, y0, () => { G.selTile = null; G.pick = null; });
   const cw = 101, gap = 6, x0 = 18;
   TW_ORDER.forEach((type, i) => {
-    const x = x0 + i * (cw + gap), y = y0 + 36, h = 112, L = TW[type].lv[0];
+    const x = x0 + i * (cw + gap), y = y0 + 42, h = 108, L = TW[type].lv[0];
     const err = buildCheck(st.c, st.r, type), on = G.pick === type, poor = G.gold < L.cost;
     g.save(); if (err && !on) g.globalAlpha = 0.55;
     rr(g, x, y, cw, h, 12); fs(g, on ? '#fff3c4' : '#f2dfc0', on ? '#e0892f' : OUT, on ? 4 : 2.2);
@@ -1316,8 +1342,8 @@ function drawBuildPanel(g, st, y0) {
   if (G.pick) {
     const err = buildCheck(st.c, st.r, G.pick);
     const s = err || TW[G.pick].desc;
-    rr(g, 140, y0 + 4, 254, 26, 10); fs(g, err ? '#ffe0da' : '#e6f3d8');
-    txt(g, s, 267, y0 + 17, fitSize(g, s, 244, 13, 8), err ? '#c42d1f' : '#3f6a37', { stroke: false });
+    rr(g, 140, y0 + 8, 240, 28, 10); fs(g, err ? '#ffe0da' : '#e6f3d8');
+    txt(g, s, 260, y0 + 22, fitSize(g, s, 230, 13, 8), err ? '#c42d1f' : '#3f6a37', { stroke: false });
   }
 }
 function drawTowerPanel(g, t, y0) {
@@ -1333,21 +1359,21 @@ function drawTowerPanel(g, t, y0) {
   const sl = statLine(t.type, L);
   txt(g, sl, 128, y0 + 64, fitSize(g, sl, 270, 13, 9), '#7a5334', { align: 'left', stroke: false });
   if (N) { const nl = '▲ ' + statLine(t.type, N); txt(g, nl, 128, y0 + 82, fitSize(g, nl, 270, 13, 9), '#3f8f3a', { align: 'left', stroke: false }); }
-  button(g, 400, y0 + 4, 34, 28, '✕', () => { G.sel = null; }, { size: 15, ...BTN_TAN });
+  panelClose(g, y0, () => { G.sel = null; });
   if (N) {
     const ok = G.gold >= N.cost;
-    button(g, 126, y0 + 96, 170, 50, '', () => upgrade(t), { enabled: ok, ...BTN_GREEN });
+    button(g, 126, y0 + 92, 170, 56, '', () => upgrade(t), { enabled: ok, ...BTN_GREEN });
     g.save(); if (!ok) g.globalAlpha = 0.5;
-    txt(g, 'UPGRADE', 186, y0 + 121, 19, '#fff', { lw: 4.5 });
-    coinIcon(g, 248, y0 + 121, 8);
-    txt(g, String(N.cost), 259, y0 + 122, 16, ok ? '#ffe08a' : '#ffb0a0', { align: 'left', lw: 3.5 });
+    txt(g, 'UPGRADE', 186, y0 + 120, 19, '#fff', { lw: 4.5 });
+    coinIcon(g, 248, y0 + 120, 8);
+    txt(g, String(N.cost), 259, y0 + 121, 16, ok ? '#ffe08a' : '#ffb0a0', { align: 'left', lw: 3.5 });
     g.restore();
-  } else { rr(g, 126, y0 + 96, 170, 50, 20); fs(g, '#e9d6b4', OUT, 2); txt(g, 'MAX LEVEL', 211, y0 + 121, 19, '#b3281f', { stroke: false }); }
+  } else { rr(g, 126, y0 + 92, 170, 56, 20); fs(g, '#e9d6b4', OUT, 2); txt(g, 'MAX LEVEL', 211, y0 + 120, 19, '#b3281f', { stroke: false }); }
   const v = Math.floor(spent(t) * SELL_BACK);
-  button(g, 304, y0 + 96, 128, 50, '', () => sell(t), BTN_GOLD);
-  txt(g, 'SELL', 350, y0 + 121, 19, '#fff', { lw: 4.5 });
-  coinIcon(g, 384, y0 + 121, 8);
-  txt(g, String(v), 395, y0 + 122, 16, '#fff', { align: 'left', lw: 3.5 });
+  button(g, 304, y0 + 92, 128, 56, '', () => sell(t), BTN_GOLD);
+  txt(g, 'SELL', 350, y0 + 120, 19, '#fff', { lw: 4.5 });
+  coinIcon(g, 384, y0 + 120, 8);
+  txt(g, String(v), 395, y0 + 121, 16, '#fff', { align: 'left', lw: 3.5 });
 }
 
 function drawUI(g) {
@@ -1365,19 +1391,42 @@ function drawUI(g) {
   }
   if (st === 'paused') drawPause(g);
   if (st === 'won' || st === 'over') drawEnd(g);
+  if (G.confirm) drawConfirm(g);
 }
 function dim(g, a) { g.fillStyle = `rgba(25,12,6,${a})`; g.fillRect(VX0, VY0, VW, VH); }
 function drawPause(g) {
   dim(g, 0.6);
   G.btns = [];
-  rr(g, 70, 300, 310, 330, 24); fs(g, '#fdf1dc', OUT, 4);
-  txt(g, 'PAUSED', 225, 350, 48, '#ffd34d', { lw: 8 });
-  txt(g, `${MAPS[G.mapI].name}${G.endless ? ' · Endless' : ''} · wave ${G.wave}`, 225, 392, 16, '#7a5334', { stroke: false });
-  button(g, 110, 420, 230, 56, 'RESUME', () => { G.state = 'play'; }, { size: 26, ...BTN_GREEN });
-  button(g, 110, 490, 230, 50, 'RESTART', () => newGame(G.mapI, G.endless), { size: 22, ...BTN_GOLD });
-  button(g, 110, 554, 230, 50, 'MAP SELECT', toMenu, { size: 22, ...BTN_TAN });
+  rr(g, 60, 284, 330, 370, 24); fs(g, '#fdf1dc', OUT, 4);
+  txt(g, 'PAUSED', 225, 334, 48, '#ffd34d', { lw: 8 });
+  const sub = `${MAPS[G.mapI].name}${G.endless ? ' · Endless' : ''} · wave ${G.wave}`;
+  txt(g, sub, 225, 376, fitSize(g, sub, 300, 16, 10), '#7a5334', { stroke: false });
+  button(g, 92, 398, 266, 66, 'RESUME', resumeGame, { size: 28, ...BTN_GREEN });
+  button(g, 92, 480, 266, 60, 'RESTART MAP', askRestart, { size: 23, ...BTN_TAN });
+  button(g, 92, 556, 266, 60, 'QUIT TO MENU', askQuit, { size: 23, ...BTN_TAN });
 }
-function toMenu() { G.state = 'menu'; G.mapI = 0; setupMap(0); bgCanvas = null; G.enemies = []; G.towers = []; G.soldiers = []; G.proj = []; G.parts = []; G.floats = []; G.banner = null; }
+function resumeGame() { if (G.state === 'paused') { G.confirm = null; G.state = 'play'; } }
+function askRestart() {
+  G.confirm = { title: 'RESTART MAP?', lines: ['Start this map again from wave 1.'], ok: 'RESTART', fn: () => newGame(G.mapI, G.endless) };
+}
+function askQuit() {
+  G.confirm = { title: 'QUIT TO MENU?', lines: ["This run's progress will be lost.", 'Unlocked maps and stars are kept.'], ok: 'QUIT', fn: toMenu };
+}
+// in-canvas yes/no dialog; while it is open only its two buttons take taps
+function drawConfirm(g) {
+  const c = G.confirm;
+  dim(g, 0.55);
+  G.btns = [];
+  const h = 184 + c.lines.length * 26, y = 488 - h / 2;
+  rr(g, 36, y, 378, h, 24); fs(g, '#fdf1dc', OUT, 4);
+  txt(g, c.title, 225, y + 46, fitSize(g, c.title, 340, 38, 22), '#ffd34d', { lw: 7 });
+  c.lines.forEach((l, i) => txt(g, l, 225, y + 92 + i * 26, fitSize(g, l, 340, 18, 11), '#4a2f1d', { stroke: false }));
+  const by = y + h - 86;
+  button(g, 56, by, 160, 66, 'CANCEL', closeConfirm, { size: 23, ...BTN_TAN });
+  button(g, 234, by, 160, 66, c.ok, () => { const f = c.fn; G.confirm = null; f(); }, { size: 23 });
+}
+function closeConfirm() { G.confirm = null; }
+function toMenu() { G.confirm = null; G.state = 'menu'; G.mapI = 0; setupMap(0); bgCanvas = null; G.enemies = []; G.towers = []; G.soldiers = []; G.proj = []; G.parts = []; G.floats = []; G.banner = null; }
 function drawEnd(g) {
   dim(g, 0.62);
   G.btns = [];
@@ -1400,13 +1449,13 @@ function drawEnd(g) {
   });
   const nextMap = won && !G.endless && G.mapI + 1 < MAPS.length;
   if (nextMap) {
-    txt(g, `${MAPS[G.mapI + 1].name} unlocked!`, 225, 590, 17, '#3f8f3a', { stroke: false });
-    button(g, 60, 612, 160, 56, 'NEXT MAP', () => newGame(G.mapI + 1, false), { size: 22, ...BTN_GREEN });
-    button(g, 230, 612, 160, 56, 'MENU', toMenu, { size: 22, ...BTN_TAN });
+    txt(g, `${MAPS[G.mapI + 1].name} unlocked!`, 225, 586, 17, '#3f8f3a', { stroke: false });
+    button(g, 60, 608, 160, 66, 'NEXT MAP', () => newGame(G.mapI + 1, false), { size: 23, ...BTN_GREEN });
+    button(g, 230, 608, 160, 66, 'MENU', toMenu, { size: 23, ...BTN_TAN });
   } else {
-    if (won && !G.endless) txt(g, 'Endless mode unlocked for this map', 225, 590, 15, '#3f8f3a', { stroke: false });
-    button(g, 60, 612, 160, 56, won ? 'ENDLESS' : 'RETRY', () => newGame(G.mapI, won ? true : G.endless), { size: 22, ...BTN_GREEN });
-    button(g, 230, 612, 160, 56, 'MENU', toMenu, { size: 22, ...BTN_TAN });
+    if (won && !G.endless) txt(g, 'Endless mode unlocked for this map', 225, 586, 15, '#3f8f3a', { stroke: false });
+    button(g, 60, 608, 160, 66, won ? 'ENDLESS' : 'RETRY', () => newGame(G.mapI, won ? true : G.endless), { size: 23, ...BTN_GREEN });
+    button(g, 230, 608, 160, 66, 'MENU', toMenu, { size: 23, ...BTN_TAN });
   }
 }
 
@@ -1426,11 +1475,15 @@ function miniMap(g, mi, x, y, w, h) {
 }
 function drawMenu(g) {
   dim(g, 0.35);
-  txt(g, 'LEGION', 225, 92, 70, '#ffd34d', { lw: 11 });
-  txt(g, 'DEFENSE', 225, 154, 62, '#6aa6f0', { lw: 11 });
-  txt(g, 'Build towers. Stop the blue legion. Save the castle!', 225, 196, fitSize(g, 'Build towers. Stop the blue legion. Save the castle!', 400, 16, 10), '#fdf1dc', { lw: 4 });
+  // APPS: back to the home page that lists all the games
+  button(g, 12, 10, 128, 54, '', goApps, BTN_TAN);
+  houseIcon(g, 40, 36, 1.05);
+  txt(g, 'APPS', 94, 38, 22, '#fff', { lw: 5 });
+  txt(g, 'LEGION', 225, 128, 66, '#ffd34d', { lw: 11 });
+  txt(g, 'DEFENSE', 225, 186, 58, '#6aa6f0', { lw: 11 });
+  txt(g, 'Build towers. Stop the blue legion. Save the castle!', 225, 226, fitSize(g, 'Build towers. Stop the blue legion. Save the castle!', 400, 16, 10), '#fdf1dc', { lw: 4 });
   MAPS.forEach((m, i) => {
-    const y = 222 + i * 186, x = 22, w = 406, h = 172, pr = G.prog[i], open = unlocked(i);
+    const y = 248 + i * 180, x = 22, w = 406, h = 168, pr = G.prog[i], open = unlocked(i);
     rr(g, x, y + 5, w, h, 20); fs(g, 'rgba(0,0,0,.35)');
     rr(g, x, y, w, h, 20); fs(g, open ? '#fdf1dc' : '#cfc3b0', OUT, 3);
     miniMap(g, i, x + 12, y + 12, 92, 148);
@@ -1448,15 +1501,15 @@ function drawMenu(g) {
     }
     const info = pr.won ? `Beaten! Best endless: ${pr.bestEndless}` : pr.best ? `Best: wave ${pr.best} of ${m.waves}` : 'Not played yet';
     txt(g, info, x + 118, y + 78, fitSize(g, info, 276, 14, 10), pr.won ? '#3f8f3a' : '#b3281f', { align: 'left', stroke: false });
-    button(g, x + 118, y + 100, 140, 56, 'PLAY', () => newGame(i, false), { size: 26, ...BTN_GREEN });
-    button(g, x + 266, y + 100, 128, 56, 'ENDLESS', () => newGame(i, true), { size: 19, enabled: pr.won, ...BTN_BLUE });
-    if (!pr.won) txt(g, 'win to unlock', x + 330, y + 166, 11, '#8a6a4a', { stroke: false });
+    button(g, x + 118, y + 94, 140, 58, 'PLAY', () => newGame(i, false), { size: 26, ...BTN_GREEN });
+    button(g, x + 266, y + 94, 128, 58, 'ENDLESS', () => newGame(i, true), { size: 19, enabled: pr.won, ...BTN_BLUE });
+    if (!pr.won) txt(g, 'win to unlock', x + 330, y + 159, 11, '#8a6a4a', { stroke: false });
   });
   const lineUp = ['wolf', 'spearman', 'swordsman', 'healer', 'rider', 'elephant'];
   let x = 40;
   for (const t of lineUp) { const s = t === 'elephant' ? 0.62 : 0.78; drawFigureFast(g, t, 1, 1, x, 812 + 150, s, { face: -1, walk: G.t + x }); x += t === 'elephant' ? 70 : t === 'rider' ? 66 : 52; }
   drawTower(g, 'archer', 2, 410, 948, { k: 0.85, atk: (G.t * 1.5) % 1 });
-  txt(g, 'Progress is saved on this device', 225, 900, 13, 'rgba(253,241,220,.75)', { stroke: false });
+  txt(g, 'Progress is saved on this device', 225, 904, 13, 'rgba(253,241,220,.75)', { stroke: false });
 }
 
 // =====================================================================
@@ -1489,9 +1542,35 @@ function frame(now) {
     for (let i = 0; i < n; i++) update(STEP);
     acc -= STEP;
   }
+  syncHistory();
   render();
   requestAnimationFrame(frame);
 }
+
+// ---------- navigation ------------------------------------------------
+// menu is the top screen; APPS leaves to the home page with all the games
+function isTop() { return G.state === 'menu'; }
+function goApps() { location.href = '../'; }
+// one history entry while in sub-screens, so the browser/system back gesture
+// steps back inside the game instead of leaving it
+let histPushed = false;
+function syncHistory() {
+  if (isTop()) histPushed = false;
+  else if (!histPushed) { histPushed = true; try { history.pushState({ ld: 1 }, ''); } catch (e) {} }
+}
+// the on-screen "back one level" for the current screen
+function goBack() {
+  if (G.confirm) { closeConfirm(); return; }
+  if (G.state === 'play') pauseGame();
+  else if (G.state === 'paused') resumeGame();
+  else if (G.state === 'won' || G.state === 'over') toMenu();
+}
+window.addEventListener('popstate', () => {
+  if (isTop()) { histPushed = false; history.back(); return; }
+  goBack();
+  if (!isTop()) { histPushed = true; try { history.pushState({ ld: 1 }, ''); } catch (e) {} }
+  else histPushed = false;
+});
 
 // ---------- input -----------------------------------------------------
 function toL(e) {
@@ -1523,20 +1602,21 @@ cv.addEventListener('pointerdown', e => {
 });
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
+  if (G.confirm) { if (k === 'escape') closeConfirm(); return; }
   if (G.state === 'play') {
     if (k === ' ' || k === 'enter') { e.preventDefault(); startWave(); }
     else if (k === 's') cycleSpeed();
-    else if (k === 'p' || k === 'escape') G.state = 'paused';
+    else if (k === 'p' || k === 'escape') pauseGame();
     else if (k >= '1' && k <= '4' && G.selTile) { const ty = TW_ORDER[+k - 1]; if (G.pick === ty) { build(G.selTile.c, G.selTile.r, ty); G.selTile = null; G.pick = null; } else G.pick = ty; }
     else if (k === 'u' && G.sel) upgrade(G.sel);
-  } else if (G.state === 'paused' && (k === 'p' || k === 'escape' || k === ' ')) G.state = 'play';
+  } else if (G.state === 'paused' && (k === 'p' || k === 'escape' || k === ' ')) resumeGame();
 });
 cv.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'play') G.state = 'paused'; });
 
 // exposed for automated testing
 window.TD = {
-  G, MAPS, TW, EN, newGame, build, upgrade, sell, startWave, waveDef, buildCheck, toMenu, tapMap, save, loadSave,
+  G, MAPS, TW, EN, newGame, build, upgrade, sell, startWave, waveDef, buildCheck, toMenu, tapMap, save, loadSave, isTop, goBack,
   // run the game without drawing, as fast as possible
   sim(seconds) { G.fast = true; const n = Math.round(seconds / STEP); for (let i = 0; i < n && G.state === 'play'; i++) update(STEP); G.fast = false; return G.state; },
 };

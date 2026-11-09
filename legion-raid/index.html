@@ -188,6 +188,7 @@ const G = {
   L: 1, S: [], occ: new Int16Array(NT), allow: new Uint8Array(NT), sver: 0, total: 0, destroyed: 0,
   troops: [], proj: [], left: {}, sel: null, raidT: RAID_T, ended: false, deployed: false, res: null,
   press: null, warnT: 0, hintT: 0, loot: 0, speed: P.speed || 1, rt: 0,
+  confirm: false,   // the "End raid now?" dialog is open (battle paused)
 };
 function later(t, fn) { G.timers.push({ t, fn }); }
 const housing = a => ORDER.reduce((s, t) => s + (a[t] || 0) * TROOPS[t].house, 0);
@@ -320,7 +321,7 @@ function startRaid() {
   G.troops = []; G.proj = []; G.fx = []; G.parts = []; G.floats = []; G.timers = []; G.banner = null;
   G.left = {}; for (const t of ORDER) if (P.army[t] > 0 && P.have.includes(t)) G.left[t] = P.army[t];
   G.sel = ORDER.find(t => G.left[t] > 0) || null;
-  G.raidT = RAID_T; G.ended = false; G.deployed = false; G.res = null; G.loot = 0; G.press = null; G.hintT = 0; G.warnT = 0;
+  G.raidT = RAID_T; G.ended = false; G.deployed = false; G.res = null; G.loot = 0; G.press = null; G.hintT = 0; G.warnT = 0; G.confirm = false;
   G.state = 'raid'; FLOW.clear();
   showBanner('RAID!', 'Tap outside the red line to send troops', '#ffe08a', 1.6);
 }
@@ -333,7 +334,7 @@ function newTroop(type, x, y) {
 function canDeploy(x, y) { const i = tileOf(x, y); return i >= 0 && G.allow[i] === 1; }
 function nextSel() { G.sel = ORDER.find(t => G.left[t] > 0) || null; }
 function deployAt(x, y, quiet) {
-  if (G.state !== 'raid' || G.ended) return false;
+  if (G.state !== 'raid' || G.ended || G.confirm) return false;
   if (!G.sel || !(G.left[G.sel] > 0)) nextSel();
   if (!G.sel) { if (!quiet) floatText(x, y - 10, 'No troops left', '#ffe08a', 16); return false; }
   if (!canDeploy(x, y)) { if (!quiet) { G.warnT = 1.4; floatText(x, y - 10, "Can't drop here!", '#ff8a7a', 16); } return false; }
@@ -585,6 +586,7 @@ function stepRaid(dt) {
 }
 function endRaid(why) {
   if (G.state !== 'raid' || G.ended) return;
+  G.confirm = false;
   if (!G.deployed) { G.state = 'army'; return; }   // nothing sent: just go back
   G.ended = true; G.press = null;
   const p = pct(), th = G.S.find(s => s.type === 'th');
@@ -1120,8 +1122,26 @@ function button(g, x, y, w, h, label, fn, o) {
   rr(g, x + 6, y + 4, w - 12, h * 0.36, h / 3); fs(g, 'rgba(255,255,255,.25)');
   if (label) txt(g, label, x + w / 2 + (o.dx || 0), y + h / 2 + 1, o.size || 24, '#fff', { lw: 5 });
   g.restore();
-  if (en) G.btns.push({ x, y, w, h, fn });
+  const pd = o.pad || 0;   // extra invisible tap margin for small controls
+  if (en) G.btns.push({ x: x - pd, y: y - pd, w: w + pd * 2, h: h + pd * 2, fn });
 }
+// a small house drawn with paths (the title font has no house glyph)
+function houseIcon(g, cx, cy, k) {
+  g.save(); g.translate(cx, cy); g.scale(k, k); g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(-13, -1); g.lineTo(0, -13); g.lineTo(13, -1);
+  g.lineTo(9, -1); g.lineTo(9, 12); g.lineTo(-9, 12); g.lineTo(-9, -1); g.closePath();
+  fs(g, '#fff', OUT, 2.6);
+  rr(g, -3.5, 3, 7, 9, 1.5); fs(g, '#8a6a4a');
+  g.restore();
+}
+// a solid arrow head drawn with paths (dir -1 = left, 1 = right)
+function arrowIcon(g, cx, cy, r, dir) {
+  g.beginPath(); g.moveTo(cx + dir * r, cy); g.lineTo(cx - dir * r * 0.7, cy - r); g.lineTo(cx - dir * r * 0.7, cy + r); g.closePath();
+  g.lineJoin = 'round'; fs(g, '#fff', OUT, 3);
+}
+// standard spots so every screen looks and works the same:
+// back/exit is tan at the bottom left, the main go button is green at the bottom right
+const BOT_Y = 890, BOT_H = 66, BACK_W = 150;
 const GREEN = { c1: '#8fd068', c2: '#3f8f3a' }, GOLDB = { c1: '#ffcf5a', c2: '#d9921c' }, BLUE = { c1: '#6aa6f0', c2: '#2f64b3' }, TAN = { c1: '#c9b08a', c2: '#8a6a4a' };
 function goldPill(g, x, y) {
   rr(g, x, y, 124, 34, 17); fs(g, 'rgba(43,29,22,.82)', OUT, 2);
@@ -1237,6 +1257,23 @@ function drawUI(g) {
     if (b.sub) txt(g, b.sub, 0, 46, fitSize(g, b.sub, 400, 20, 12), '#fff', { lw: 5 });
     g.restore();
   }
+  if (G.confirm) drawConfirm(g);
+}
+// "End raid now?" — the battle is paused and only these two buttons respond
+function drawConfirm(g) {
+  G.btns = [];
+  g.fillStyle = 'rgba(25,12,6,.62)'; g.fillRect(VX0, VY0, VW, VH);
+  panel(g, 34, 330, 382, 300);
+  txt(g, 'End raid now?', 225, 382, 38, '#ffd34d', { lw: 8 });
+  txt(g, 'You keep the gold and stars', 225, 432, 18, '#4a2f1d', { stroke: false });
+  txt(g, 'earned so far.', 225, 456, 18, '#4a2f1d', { stroke: false });
+  const p = pct(), th = G.S.find(s => s.type === 'th');
+  const sN = (p >= 50 ? 1 : 0) + (th && th.dead ? 1 : 0) + (p >= 100 ? 1 : 0);
+  for (let i = 0; i < 3; i++) star(g, 175 + i * 26, 498, 11, i < sN, 2);
+  txt(g, p + '%', 268, 499, 22, '#4a2f1d', { align: 'left', stroke: false });
+  const kl = 'KEEP FIGHTING';
+  button(g, 52, 538, 180, BOT_H, kl, closeConfirm, { size: fitSize(g, kl, 160, 22, 14), ...TAN });
+  button(g, 244, 538, 154, BOT_H, 'END RAID', () => endRaid('Raid ended'), { size: 23 });
 }
 function enemyBadge(g, x, y, r) {
   circ(g, x, y, r); fs(g, '#dcebff', OUT, 2.5);
@@ -1256,26 +1293,35 @@ function setView(L) {
 function drawHome(g) {
   // title band over the trees
   g.fillStyle = 'rgba(25,40,20,.35)'; g.fillRect(VX0, MY, VW, MH);
-  txt(g, 'LEGION', 160, 52, 54, '#ffd34d', { lw: 10 });
-  txt(g, 'RAID', 342, 52, 54, '#ff6a4d', { lw: 10 });
-  goldPill(g, 163, 82);
-  // base selector card
-  const y0 = 776;
-  rr(g, 14, y0, 422, 100, 20); fs(g, '#fdf1dc', OUT, 3.5);
-  const L = P.view;
-  enemyBadge(g, 56, y0 + 50, 26);
-  txt(g, `BASE ${L}`, 92, y0 + 26, 26, '#b3281f', { align: 'left', stroke: false });
-  const nm = baseName(L);
-  txt(g, nm, 92, y0 + 52, fitSize(g, nm, 190, 18, 11), '#4a2f1d', { align: 'left', stroke: false });
-  const inf = baseInfo(L);
-  txt(g, inf, 92, y0 + 76, fitSize(g, inf, 230, 13, 8), '#8a6a4a', { align: 'left', stroke: false });
+  // APPS: leave the game for the page that lists all the games (top left, inside the safe area)
+  button(g, 12, 10, 124, 66, 'APPS', goApps, { size: 23, dx: 16, ...TAN });
+  houseIcon(g, 40, 43, 1.1);
+  // title, fitted into the space right of the APPS button
+  let ts = 52, w1, w2, sp;
+  for (;;) { g.font = `400 ${ts}px ${F}`; w1 = g.measureText('LEGION').width; w2 = g.measureText('RAID').width; sp = ts * 0.25; if (w1 + w2 + sp <= 290 || ts <= 30) break; ts--; }
+  const tx = 293 - (w1 + w2 + sp) / 2;
+  txt(g, 'LEGION', tx + w1 / 2, 42, ts, '#ffd34d', { lw: 10 });
+  txt(g, 'RAID', tx + w1 + sp + w2 / 2, 42, ts, '#ff6a4d', { lw: 10 });
+  goldPill(g, 231, 76);
+  // base picker: big arrows either side of the base card
+  const y0 = 776, L = P.view, cx0 = 88, cw = 274;
+  button(g, 14, y0, 66, 100, '', () => setView(L - 1), { enabled: L > 1, ...TAN });
+  g.save(); if (L <= 1) g.globalAlpha = 0.5; arrowIcon(g, 47, y0 + 50, 14, -1); g.restore();
+  button(g, 370, y0, 66, 100, '', () => setView(L + 1), { enabled: L < P.unlocked, ...TAN });
+  g.save(); if (L >= P.unlocked) g.globalAlpha = 0.5; arrowIcon(g, 403, y0 + 50, 14, 1); g.restore();
+  rr(g, cx0, y0, cw, 100, 20); fs(g, '#fdf1dc', OUT, 3.5);
+  enemyBadge(g, cx0 + 34, y0 + 50, 24);
+  const tx0 = cx0 + 66, tw = cw - 74;
+  txt(g, `BASE ${L}`, tx0, y0 + 21, 24, '#b3281f', { align: 'left', stroke: false });
   const sN = P.stars[L] || 0;
-  for (let i = 0; i < 3; i++) star(g, 340 + i * 30, y0 + 30 - (i === 1 ? 5 : 0), 13, i < sN);
-  txt(g, L < P.unlocked ? 'Beaten' : 'Next base', 370, y0 + 60, 14, '#8a6a4a', { stroke: false });
-  button(g, 300, y0 + 70, 34, 26, '◀', () => setView(L - 1), { size: 14, enabled: L > 1, ...TAN });
-  button(g, 342, y0 + 70, 34, 26, '▶', () => setView(L + 1), { size: 14, enabled: L < P.unlocked, ...TAN });
-  button(g, 14, 892, 270, 62, 'ATTACK!', () => { G.state = 'army'; }, { size: 32 });
-  button(g, 296, 892, 140, 62, 'CAMP', () => { G.state = 'shop'; }, { size: 24, ...GOLDB });
+  for (let i = 0; i < 3; i++) star(g, cx0 + cw - 70 + i * 24, y0 + 21, 10, i < sN, 2);
+  const nm = baseName(L);
+  txt(g, nm, tx0, y0 + 45, fitSize(g, nm, tw, 18, 11), '#4a2f1d', { align: 'left', stroke: false });
+  const inf = baseInfo(L);
+  txt(g, inf, tx0, y0 + 66, fitSize(g, inf, tw, 13, 8), '#8a6a4a', { align: 'left', stroke: false });
+  txt(g, L < P.unlocked ? 'Beaten' : 'Next base', tx0, y0 + 86, 13, L < P.unlocked ? '#3f8f3a' : '#b3281f', { align: 'left', stroke: false });
+  button(g, 14, BOT_Y, 270, BOT_H, 'ATTACK!', () => { G.state = 'army'; }, { size: 32, ...GREEN });
+  button(g, 296, BOT_Y, 140, BOT_H, 'CAMP', () => { G.state = 'shop'; }, { size: 26, ...GOLDB });
   // a few of your troops at the edge
   const pulse = Math.sin(G.t * 3);
   drawFigure(g, 'swordsman', 0, 1, 52, MY + 62 + pulse, 1.0, { face: 1 });
@@ -1312,37 +1358,37 @@ function drawArmy(g) {
   if (used > 0) { rr(g, 60, 70, 330 * Math.min(1, used / P.cap), 26, 13); fs(g, used >= P.cap ? '#8fd068' : '#f6c343'); }
   rr(g, 60, 70, 330, 26, 13); g.strokeStyle = OUT; g.lineWidth = 2.5; g.stroke();
   txt(g, `Camp space ${used} / ${P.cap}`, 225, 84, 16, '#fff', { lw: 4 });
-  panel(g, 14, 108, 422, 660);
+  panel(g, 14, 108, 422, 620);
   ORDER.forEach((t, i) => {
-    const y = 118 + i * 80, d = TROOPS[t], has = P.have.includes(t), n = P.army[t] || 0;
-    rr(g, 24, y, 402, 72, 14); fs(g, has ? (n > 0 ? '#ffe7b8' : '#f3e2c4') : '#ddd2bf', 'rgba(90,60,30,.35)', 2);
+    const y = 116 + i * 76, d = TROOPS[t], has = P.have.includes(t), n = P.army[t] || 0;
+    rr(g, 24, y, 402, 70, 14); fs(g, has ? (n > 0 ? '#ffe7b8' : '#f3e2c4') : '#ddd2bf', 'rgba(90,60,30,.35)', 2);
     g.save(); if (!has) g.globalAlpha = 0.45;
     const fs_ = t === 'elephant' ? 0.62 : t === 'rider' || t === 'catapult' ? 0.85 : 1;
-    drawFigureFast(g, t, 0, 1, 62, y + 62, fs_, {});
+    drawFigureFast(g, t, 0, 1, 62, y + 61, fs_, {});
     g.restore();
-    txt(g, UNITS[t].plural, 104, y + 20, 20, has ? '#4a2f1d' : '#8a7a6a', { align: 'left', stroke: false });
+    txt(g, UNITS[t].plural, 104, y + 19, 20, has ? '#4a2f1d' : '#8a7a6a', { align: 'left', stroke: false });
     txt(g, d.role, 104, y + 42, fitSize(g, d.role, 190, 13, 9), '#8a6a4a', { align: 'left', stroke: false });
-    txt(g, `Space ${d.house}`, 104, y + 60, 12, '#b3281f', { align: 'left', stroke: false });
+    txt(g, `Space ${d.house}`, 104, y + 59, 12, '#b3281f', { align: 'left', stroke: false });
     if (!has) {
       rr(g, 306, y + 20, 110, 32, 12); fs(g, 'rgba(0,0,0,.12)');
       txt(g, `Unlock: ${d.unlock}`, 361, y + 30, 13, '#6b5a4a', { stroke: false });
       txt(g, 'in Camp', 361, y + 45, 11, '#6b5a4a', { stroke: false });
       return;
     }
-    button(g, 300, y + 16, 40, 40, '−', () => addTroop(t, -1), { size: 26, enabled: n > 0, ...TAN });
-    txt(g, String(n), 362, y + 37, 24, '#4a2f1d', { stroke: false });
-    button(g, 382, y + 16, 40, 40, '+', () => addTroop(t, 1), { size: 26, enabled: used + d.house <= P.cap, ...GREEN });
+    button(g, 296, y + 13, 44, 44, '−', () => addTroop(t, -1), { size: 28, enabled: n > 0, pad: 8, ...TAN });
+    txt(g, String(n), 361, y + 36, 24, '#4a2f1d', { stroke: false });
+    button(g, 382, y + 13, 44, 44, '+', () => addTroop(t, 1), { size: 28, enabled: used + d.house <= P.cap, pad: 8, ...GREEN });
   });
-  button(g, 14, 790, 104, 50, 'BACK', () => { G.state = 'home'; }, { size: 20, ...TAN });
-  button(g, 128, 790, 100, 50, 'CLEAR', () => { P.army = {}; save(); }, { size: 20, ...BLUE });
-  button(g, 238, 790, 100, 50, 'FILL', fillArmy, { size: 20, ...GOLDB });
-  button(g, 348, 790, 88, 50, 'CAMP', () => { G.state = 'shop'; }, { size: 18, ...GOLDB });
+  button(g, 14, 758, 132, 66, 'CLEAR', () => { P.army = {}; save(); }, { size: 22, ...BLUE });
+  button(g, 159, 758, 132, 66, 'FILL', fillArmy, { size: 22, ...GOLDB });
+  button(g, 304, 758, 132, 66, 'CAMP', () => { G.state = 'shop'; }, { size: 22, ...GOLDB });
   const ok = used > 0;
-  const pul = ok ? 1 + Math.sin(G.t * 5) * 0.03 : 1;
-  g.save(); g.translate(225, 892); g.scale(pul, pul); g.translate(-225, -892);
-  button(g, 60, 860, 330, 64, `RAID BASE ${P.view}!`, startRaid, { size: 30, enabled: ok });
+  if (!ok) txt(g, 'Add some troops first', 225, 857, 16, '#ffe08a', { lw: 4 });
+  button(g, 14, BOT_Y, BACK_W, BOT_H, 'BACK', goBack, { size: 26, ...TAN });
+  const pul = ok ? 1 + Math.sin(G.t * 5) * 0.03 : 1, rx = 14 + BACK_W + 12, rw = 436 - rx, rl = `RAID BASE ${P.view}!`;
+  g.save(); g.translate(rx + rw / 2, BOT_Y + BOT_H / 2); g.scale(pul, pul); g.translate(-(rx + rw / 2), -(BOT_Y + BOT_H / 2));
+  button(g, rx, BOT_Y, rw, BOT_H, rl, startRaid, { size: fitSize(g, rl, rw - 28, 28, 18), enabled: ok, ...GREEN });
   g.restore();
-  if (!ok) txt(g, 'Add some troops first', 225, 945, 15, '#ffe08a', { lw: 4 });
 }
 // ---------- camp upgrades ----------
 const capCost = () => 100 + 60 * P.capN;
@@ -1368,11 +1414,11 @@ function drawShop(g) {
     txt(g, r.desc, 110, y + 58, fitSize(g, r.desc, 180, 14, 9), '#8a6a4a', { align: 'left', stroke: false });
     if (r.done) { txt(g, r.icon === 'camp' || r.icon === 'train' ? 'MAX' : 'READY', 362, y + 44, 20, '#3f8f3a', { stroke: false }); return; }
     const can = P.gold >= r.cost;
-    button(g, 300, y + 22, 116, 44, String(r.cost), () => buy(r.cost, r.fn), { size: 20, enabled: can, dx: 10, ...GREEN });
-    coinIcon(g, 322, y + 44, 10);
+    button(g, 296, y + 18, 120, 52, String(r.cost), () => buy(r.cost, r.fn), { size: 21, enabled: can, dx: 10, pad: 6, ...GREEN });
+    coinIcon(g, 320, y + 44, 10);
   });
-  button(g, 14, 866, 200, 58, 'BACK', () => { G.state = 'home'; }, { size: 24, ...TAN });
-  button(g, 236, 866, 200, 58, 'ARMY', () => { G.state = 'army'; }, { size: 24 });
+  button(g, 14, BOT_Y, BACK_W, BOT_H, 'BACK', goBack, { size: 26, ...TAN });
+  button(g, 14 + BACK_W + 12, BOT_Y, 436 - (14 + BACK_W + 12), BOT_H, 'ARMY', () => { G.state = 'army'; }, { size: 28, ...GOLDB });
 }
 // ---------- raid HUD ----------
 function drawRaidHUD(g) {
@@ -1414,12 +1460,12 @@ function drawRaidHUD(g) {
     txt(g, 'x' + left, x + sw / 2, y + 76, 14, '#fff', { lw: 3 });
     G.btns.push({ x, y, w: sw, h: 86, fn: () => { if (G.left[t] > 0) G.sel = t; } });
   });
-  button(g, 14, 888, 150, 50, G.deployed ? 'END RAID' : 'BACK', () => endRaid('Raid ended'), { size: 20, ...TAN });
-  button(g, 286, 888, 150, 50, 'SPEED x' + G.speed, () => { G.speed = G.speed === 1 ? 2 : 1; P.speed = G.speed; save(); }, { size: 20, ...BLUE });
+  if (!G.ended) button(g, 14, BOT_Y, BACK_W, BOT_H, G.deployed ? 'END RAID' : 'BACK', goBack, { size: G.deployed ? 23 : 26, ...TAN });
+  button(g, 436 - BACK_W, BOT_Y, BACK_W, BOT_H, 'SPEED x' + G.speed, () => { G.speed = G.speed === 1 ? 2 : 1; P.speed = G.speed; save(); }, { size: 23, ...BLUE });
   if (G.hintT < 6 && !G.deployed) {
     g.save(); g.globalAlpha = 0.65 + Math.sin(G.t * 5) * 0.3;
-    txt(g, 'Tap or drag on the grass', 225, 902, 15, '#ffe08a', { lw: 4 });
-    txt(g, 'to send troops', 225, 922, 15, '#ffe08a', { lw: 4 });
+    txt(g, 'Tap the grass', 225, BOT_Y + 22, 15, '#ffe08a', { lw: 4 });
+    txt(g, 'to send troops', 225, BOT_Y + 44, 15, '#ffe08a', { lw: 4 });
     g.restore();
   }
 }
@@ -1445,9 +1491,9 @@ function drawResult(g) {
   if (R.newS) txt(g, `includes ${R.newS} new star bonus`, 225, 566, 13, '#3f8f3a', { stroke: false });
   if (R.unlockedNew) txt(g, `Base ${R.L + 1} unlocked!`, 225, 588, 17, '#b3281f', { stroke: false });
   const ok = R.t > 0.6;
-  if (R.stars && P.unlocked > R.L) button(g, 64, 612, 170, 58, 'NEXT BASE', () => { setView(R.L + 1); G.state = 'army'; }, { size: 22, enabled: ok, ...GREEN });
-  else button(g, 64, 612, 170, 58, 'RETRY', () => { setView(R.L); G.state = 'army'; }, { size: 24, enabled: ok, ...GREEN });
-  button(g, 246, 612, 140, 58, 'HOME', () => { setView(P.view); G.state = 'home'; }, { size: 24, enabled: ok, ...TAN });
+  button(g, 58, 612, 140, BOT_H, 'HOME', goHome, { size: 26, enabled: ok, ...TAN });
+  if (R.stars && P.unlocked > R.L) button(g, 210, 612, 182, BOT_H, 'NEXT BASE', () => { setView(R.L + 1); G.state = 'army'; }, { size: 25, enabled: ok, ...GREEN });
+  else button(g, 210, 612, 182, BOT_H, 'RETRY', () => { setView(R.L); G.state = 'army'; }, { size: 27, enabled: ok, ...GREEN });
 }
 
 // =====================================================================
@@ -1480,7 +1526,7 @@ function update(dt) {
 }
 // holding a finger down keeps dropping troops (real time, not sped up)
 function updatePress(dt) {
-  const p = G.press; if (!p || G.state !== 'raid' || G.ended) return;
+  const p = G.press; if (!p || G.state !== 'raid' || G.ended || G.confirm) return;
   p.acc += dt;
   if (p.acc >= 0.11) { p.acc = 0; deployAt(p.x, p.y, true); }
 }
@@ -1488,14 +1534,48 @@ let last = performance.now(), acc = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
   while (acc >= STEP) {
-    const n = G.state === 'raid' ? G.speed : 1;
-    for (let i = 0; i < n; i++) update(STEP);
-    updatePress(STEP);
+    if (!G.confirm) {
+      const n = G.state === 'raid' ? G.speed : 1;
+      for (let i = 0; i < n; i++) update(STEP);
+      updatePress(STEP);
+    }
     acc -= STEP;
   }
+  syncHistory();
   render();
   requestAnimationFrame(frame);
 }
+
+// ---------- navigation ------------------------------------------------
+// home is the top screen. Every other screen has one back step:
+// army / camp / result -> home, raid -> army (before any drop) or the "End raid now?" dialog.
+const isTop = () => G.state === 'home';
+function goApps() { location.href = '../'; }
+function goHome() { setView(P.view); G.state = 'home'; G.confirm = false; }
+function closeConfirm() { G.confirm = false; }
+function goBack() {
+  if (G.confirm) { closeConfirm(); return; }
+  const st = G.state;
+  if (st === 'army' || st === 'shop') G.state = 'home';
+  else if (st === 'result') goHome();
+  else if (st === 'raid') {
+    if (G.ended) return;                         // the result is about to show
+    if (!G.deployed) { endRaid('Raid ended'); return; }   // nothing sent yet: leave now
+    G.confirm = true; G.press = null;            // troops are out: ask first
+  }
+}
+// browser / system back: keep one extra history entry while inside a sub-screen
+let navPushed = false;
+function syncHistory() {
+  if (isTop()) navPushed = false;
+  else if (!navPushed) { try { history.pushState({ lr: 1 }, ''); } catch (err) {} navPushed = true; }
+}
+window.addEventListener('popstate', () => {
+  if (isTop()) { navPushed = false; history.back(); return; }
+  navPushed = false;      // the browser just used up our entry
+  goBack();
+  syncHistory();          // still inside a sub-screen: put the entry back
+});
 
 // ---------- input -----------------------------------------------------
 function toL(e) {
@@ -1508,9 +1588,9 @@ cv.addEventListener('pointerdown', e => {
   const p = toL(e);
   for (let i = G.btns.length - 1; i >= 0; i--) {
     const b = G.btns[i];
-    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { b.fn(); return; }
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { b.fn(); syncHistory(); return; }
   }
-  if (G.state === 'raid' && !G.ended && inMap(p)) {
+  if (G.state === 'raid' && !G.ended && !G.confirm && inMap(p)) {
     G.press = { x: p.x, y: p.y, acc: 0, id: e.pointerId };
     try { cv.setPointerCapture(e.pointerId); } catch (err) {}
     deployAt(p.x, p.y, false);
@@ -1527,6 +1607,8 @@ cv.addEventListener('pointercancel', endPress);
 cv.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
+  if (k === 'escape') { e.preventDefault(); goBack(); syncHistory(); return; }
+  if (G.confirm) return;
   if (k === 's' && G.state === 'raid') { G.speed = G.speed === 1 ? 2 : 1; P.speed = G.speed; save(); }
   if (k >= '1' && k <= '8' && G.state === 'raid') { const t = ORDER.filter(t => G.left[t] != null)[+k - 1]; if (t && G.left[t] > 0) G.sel = t; }
 });
@@ -1550,7 +1632,7 @@ function drawIcon(size) {
 
 // exposed for automated testing
 window.RAID = {
-  G, P, startRaid, deployAt, endRaid, drawIcon, buildBase, setView,
+  G, P, startRaid, deployAt, endRaid, drawIcon, buildBase, setView, goBack, isTop,
   sim(sec) { const n = Math.round(sec / STEP); for (let i = 0; i < n && G.state === 'raid'; i++) update(STEP); for (let i = 0; i < 120 && G.timers.length; i++) update(STEP); return G.state; },
   allowed() { const out = []; for (let i = 0; i < NT; i++) if (G.allow[i]) out.push([MX + (i % COLS + 0.5) * TS, MY + (((i / COLS) | 0) + 0.5) * TS]); return out; },
   autoDeploy(spots) {
