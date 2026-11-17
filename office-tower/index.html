@@ -1,0 +1,1867 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>برج الأعمال</title>
+<!-- full-screen when opened from the iPhone home screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="برج الأعمال">
+<meta name="theme-color" content="#101a36">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<style>
+  /* keep the game clear of the notch, the Dynamic Island and the home bar */
+  html { height: 100%; background: #c3c7d2; box-sizing: border-box; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; font: 14px system-ui; }
+  [hidden] { display: none !important; }
+</style>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => {});
+</script>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@500;700;800&display=swap">
+<style>
+/* Layout: full-screen 3D office floor on a grid; strategy HUD on top (cash, reputation, day, speed), objective chip, blue dock at bottom; build tray and sheets rise from the bottom. */
+:root {
+  --ink: #101a36;
+  --ink-soft: rgba(16, 26, 54, .8);
+  --paper: #eef2fa;
+  --card: #ffffff;
+  --text: #16203a;
+  --muted: #5d6988;
+  --line: #dbe2f0;
+  --accent: #2f6bff;
+  --accent-deep: #1b47c4;
+  --go: #19a655;
+  --go-deep: #0f7a3c;
+  --off: #a6aec2;
+  --off-deep: #848ca1;
+  --warn: #e0393f;
+  --warn-deep: #a8242a;
+  --gold: #ffb820;
+  --sky: #c3c7d2;
+  --font: "Baloo Bhaijaan 2", "SF Arabic", "Geeza Pro", system-ui, sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body {
+  background: var(--sky); color: var(--text); font-family: var(--font);
+  overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+}
+#app { position: relative; height: 100%; overflow: hidden; }
+#gl, #fx { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#gl { touch-action: none; }
+#fx { pointer-events: none; }
+svg.i { width: 1.15em; height: 1.15em; flex: none; display: block; }
+button { font-family: var(--font); cursor: pointer; }
+
+.overlay {
+  position: absolute; inset-inline: 0; pointer-events: none;
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
+}
+#hud { top: 0; padding-block: 10px; display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; gap: 6px; align-items: center; }
+.grow { flex: 1; min-width: 0; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px;
+  background: var(--ink-soft); color: #fff; border-radius: 999px; border: 1.5px solid rgba(255,255,255,.14);
+  padding: 2px 12px; font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1;
+  box-shadow: 0 2px 6px rgba(16,26,54,.25); white-space: nowrap;
+}
+.pill small { font-size: 12px; font-weight: 800; }
+.pos { color: #6cf09a; } .neg { color: #ff8a8f; }
+.pill.bad { background: var(--warn); }
+.pill.bad .neg { color: #fff; }
+.seg { direction: ltr; display: inline-flex; background: var(--ink-soft); border-radius: 999px; padding: 3px; gap: 2px; pointer-events: auto; border: 1.5px solid rgba(255,255,255,.14); }
+.seg button { width: 38px; height: 32px; border: 0; border-radius: 999px; background: transparent; color: #c9d3ee; display: grid; place-items: center; }
+.seg button.on { background: var(--accent); color: #fff; }
+.seg svg.i { width: 18px; height: 18px; }
+.iconbtn {
+  pointer-events: auto; width: 40px; height: 40px; border-radius: 12px;
+  display: grid; place-items: center; background: var(--ink-soft); color: #fff; border: 1.5px solid rgba(255,255,255,.14);
+}
+.ring { width: 22px; height: 22px; }
+#goal {
+  all: unset; box-sizing: border-box; pointer-events: auto; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; max-width: 360px;
+  background: var(--ink-soft); color: #fff; border-radius: 16px; padding: 7px 12px; border: 1.5px solid rgba(255,255,255,.14);
+  font-family: var(--font); box-shadow: 0 2px 6px rgba(16,26,54,.25);
+}
+#goal[hidden] { display: none; }
+#goal .gi { width: 30px; height: 30px; border-radius: 9px; background: var(--gold); color: #4a3000; display: grid; place-items: center; flex: none; }
+#goal .gt { font-size: 14px; font-weight: 700; line-height: 1.3; }
+#goal .gr { font-size: 13px; font-weight: 800; color: #ffe2a0; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+#goal.done { background: var(--go); animation: bump 1s ease-in-out infinite; }
+#goal.done .gr { color: #fff; }
+@keyframes bump { 50% { transform: scale(1.04); } }
+
+#toast { top: 150px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+#toast span {
+  background: rgba(16, 26, 54, .92); color: #fff; font-weight: 700; font-size: 15px;
+  padding: 8px 16px; border-radius: 16px; text-align: center; max-width: 100%; border: 1.5px solid rgba(255,255,255,.16);
+  animation: tin .25s ease-out;
+}
+#toast span.r { background: var(--warn); }
+#toast span.g { background: var(--go); }
+@keyframes tin { from { transform: translateY(-8px); opacity: 0; } }
+
+#dock { bottom: 0; padding-block: 10px 12px; display: flex; gap: 8px; justify-content: center; }
+.tab {
+  pointer-events: auto; position: relative; flex: 1; max-width: 100px; min-height: 60px;
+  border: 0; border-radius: 16px; background: linear-gradient(#4a82ff, var(--accent)); color: #fff;
+  box-shadow: 0 5px 0 var(--accent-deep), 0 8px 14px rgba(16,26,54,.3); font-weight: 700; font-size: 13px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1.2;
+}
+.tab svg.i { width: 24px; height: 24px; }
+.tab:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--accent-deep); }
+.tab .dot {
+  position: absolute; top: -6px; inset-inline-end: -5px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 99px; background: var(--warn); border: 2px solid #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center;
+}
+button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+.panel {
+  position: absolute; inset-inline: 0; bottom: 0; background: var(--paper); border-radius: 24px 24px 0 0;
+  box-shadow: 0 -10px 34px rgba(16, 26, 54, .3); padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex; flex-direction: column; animation: rise .22s ease-out;
+}
+@keyframes rise { from { transform: translateY(30px); opacity: 0; } }
+.phead {
+  display: flex; align-items: center; gap: 10px; padding-block: 12px 6px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.phead h2 { margin: 0; font-size: 20px; font-weight: 800; flex: 1; min-width: 0; text-wrap: balance; }
+.xbtn { width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--line); color: var(--text); display: grid; place-items: center; flex: none; }
+#sheet { max-height: 70%; }
+#body {
+  overflow-y: auto; -webkit-overflow-scrolling: touch; padding-block: 4px 18px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 10px;
+}
+#scrim { position: absolute; inset: 0; background: rgba(16, 26, 54, .2); }
+
+#buildbar { max-height: 72%; }
+#bList { overflow-y: auto; }
+.bscroll { display: flex; gap: 10px; overflow-x: auto; padding: 4px max(16px, env(safe-area-inset-left, 0px)) 14px; scroll-snap-type: x proximity; }
+.bcard {
+  flex: none; width: 138px; scroll-snap-align: start; border: 0; text-align: start; border-radius: 18px; background: #fff; padding: 10px;
+  display: flex; flex-direction: column; gap: 5px; box-shadow: 0 1px 0 var(--line), 0 4px 12px rgba(16,26,54,.08); color: var(--text); position: relative;
+}
+.bcard:disabled { opacity: .55; }
+.bcard .ti { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 21px; color: #fff; }
+.bcard b { font-size: 15px; font-weight: 800; }
+.bcard .fx { font-size: 12px; color: var(--muted); line-height: 1.35; min-height: 32px; }
+.bcard .pr { font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 4px; }
+.bcard .up { font-size: 11.5px; color: var(--muted); }
+.bcard .lock { position: absolute; top: 8px; inset-inline-end: 8px; background: var(--ink); color: #ffd23f; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 2px 7px; }
+.sec { font-size: 13px; font-weight: 800; color: var(--muted); padding-inline: max(16px, env(safe-area-inset-left, 0px)); margin-top: 2px; }
+
+#placebar .pinfo { padding: 0 max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 4px; min-height: 48px; }
+.pline { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.pline.ok { color: var(--go); } .pline.no { color: var(--warn); } .pline.mid { color: var(--muted); }
+.pbtns { display: flex; gap: 8px; padding: 10px max(16px, env(safe-area-inset-left, 0px)) 12px; }
+.pbtns .btn { white-space: nowrap; padding-inline: 8px; font-size: 15px; }
+#pOk { flex: 1.4; }
+
+.card { background: var(--card); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 0 var(--line), 0 4px 12px rgba(16,26,54,.06); }
+.card h3 { margin: 0; font-size: 16px; font-weight: 800; }
+.card .top { display: flex; align-items: center; gap: 10px; }
+.card .top > div { flex: 1; min-width: 0; }
+.ti2 { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; font-size: 22px; color: #fff; flex: none; }
+.sub { color: var(--muted); font-size: 13.5px; line-height: 1.45; margin: 0; }
+.stat { display: flex; justify-content: space-between; gap: 10px; font-size: 14.5px; }
+.stat span { color: var(--muted); }
+.stat b { font-variant-numeric: tabular-nums; }
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; flex: 1;
+  border: 0; border-radius: 15px; padding: 6px 14px; background: linear-gradient(#27c36a, var(--go)); color: #fff;
+  font-weight: 800; font-size: 16px; box-shadow: 0 4px 0 var(--go-deep);
+}
+.btn.sm { min-height: 38px; font-size: 14px; flex: none; padding: 4px 12px; box-shadow: 0 3px 0 var(--go-deep); }
+.btn:disabled { background: var(--off); box-shadow: 0 4px 0 var(--off-deep); cursor: default; }
+.btn.blue { background: linear-gradient(#4a82ff, var(--accent)); box-shadow: 0 4px 0 var(--accent-deep); }
+.btn.red { background: var(--warn); box-shadow: 0 4px 0 var(--warn-deep); }
+.btn.ghost { background: var(--line); color: var(--text); box-shadow: 0 4px 0 #bcc6da; }
+.btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.2); }
+.btns { display: flex; gap: 8px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; padding: 3px 9px; border-radius: 99px; background: var(--line); color: var(--text); font-variant-numeric: tabular-nums; }
+.chip i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.chip.ok { background: #d8f5e4; color: #0f6b38; } .chip.no { background: #fde0e1; color: #a8242a; } .chip.y { background: #fff1c9; color: #6b4a00; }
+.bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 99px; }
+.prow { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+.prow .bar { flex: 1; }
+.erow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.erow .face { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; background: var(--line); flex: none; }
+.erow .nm { flex: 1; min-width: 0; }
+.erow .nm b { font-size: 15px; display: block; }
+.erow .nm span { font-size: 12.5px; color: var(--muted); }
+.stars, .erow .nm span.stars { color: #f2a900; letter-spacing: -1px; font-size: 13px; }
+.bonus { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; }
+.bonus.p { color: var(--go); } .bonus.n { color: var(--warn); } .bonus.i { color: var(--muted); }
+.linkrow { all: unset; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+canvas.chart { width: 100%; height: 150px; display: block; }
+.center { text-align: center; }
+.big { font-size: 48px; text-align: center; line-height: 1.15; }
+#boot { position: absolute; inset: 0; display: grid; place-items: center; background: var(--ink); color: #fff; font-size: 18px; font-weight: 700; text-align: center; padding: 24px; }
+@media (prefers-reduced-motion: reduce) { .panel, #goal.done, #toast span { animation: none; } }
+</style>
+
+<div id="app" dir="rtl" lang="ar">
+  <canvas id="gl" aria-label="مخطط المكتب"></canvas>
+  <canvas id="fx"></canvas>
+
+  <div id="hud" class="overlay">
+    <div class="row">
+      <span class="pill" id="pCash"><span data-i="cash"></span><bdi id="vCash">0</bdi><small id="vDelta"></small></span>
+      <span class="pill" id="pRep"><span data-i="star"></span><bdi id="vRep">0.0</bdi></span>
+      <span class="grow"></span>
+      <span class="pill" id="pDay"><svg class="ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="4"/><circle id="dayRing" cx="12" cy="12" r="9" fill="none" stroke="#ffd23f" stroke-width="4" stroke-dasharray="56.5" stroke-dashoffset="56.5" transform="rotate(-90 12 12)" stroke-linecap="round"/></svg><bdi id="vDay">يوم 1</bdi></span>
+    </div>
+    <div class="row">
+      <div class="seg" id="speed">
+        <button data-s="0" aria-label="إيقاف"><span data-i="pause"></span></button>
+        <button data-s="1" aria-label="سرعة عادية"><span data-i="play"></span></button>
+        <button data-s="2" aria-label="سرعة مضاعفة"><span data-i="ff"></span></button>
+        <button data-s="4" aria-label="سرعة قصوى"><span data-i="fff"></span></button>
+      </div>
+      <span class="pill" id="pClock"></span>
+      <span class="grow"></span>
+      <button class="iconbtn" id="btnApps" aria-label="كل الألعاب"><span data-i="apps"></span></button>
+      <button class="iconbtn" id="btnSettings" aria-label="الإعدادات"><span data-i="gear"></span></button>
+    </div>
+    <div class="row" style="flex-wrap:wrap"><button id="goal" hidden></button><span class="pill bad" id="pWarn" hidden></span></div>
+  </div>
+
+  <div id="toast" class="overlay"></div>
+
+  <nav id="dock" class="overlay">
+    <button class="tab" data-open="build"><span data-i="hammer"></span>بناء</button>
+    <button class="tab" data-open="contracts"><span data-i="doc"></span>العقود<span class="dot" id="dCon" hidden></span></button>
+    <button class="tab" data-open="team"><span data-i="users"></span>الفريق<span class="dot" id="dTeam" hidden></span></button>
+    <button class="tab" data-open="finance"><span data-i="chart"></span>المالية</button>
+  </nav>
+
+  <section id="buildbar" class="panel" hidden>
+    <div class="phead"><h2>ماذا تبني؟</h2><button class="xbtn" id="bClose" aria-label="إغلاق"><span data-i="x"></span></button></div>
+    <div id="bList"></div>
+  </section>
+
+  <section id="placebar" class="panel" hidden>
+    <div class="phead"><h2 id="pTitle"></h2></div>
+    <div class="pinfo" id="pInfo"></div>
+    <div class="pbtns">
+      <button class="btn ghost" id="pRot"><span data-i="rotate"></span>تدوير</button>
+      <button class="btn red" id="pCancel"><span data-i="x"></span>إلغاء</button>
+      <button class="btn" id="pOk"><span data-i="check"></span><span id="pOkT">ابنِ</span></button>
+    </div>
+  </section>
+
+  <div id="scrim" hidden></div>
+  <section id="sheet" class="panel" hidden>
+    <div class="phead"><h2 id="sTitle"></h2><button class="xbtn" id="sClose" aria-label="إغلاق"><span data-i="x"></span></button></div>
+    <div id="body"></div>
+  </section>
+  <div id="boot">جارٍ تجهيز المكتب…</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+if (!window.THREE) { $('boot').textContent = 'تعذّر تحميل محرك الرسم. تأكد من الاتصال بالإنترنت ثم أعد فتح الصفحة.'; return; }
+
+// ======================= icons =======================
+const ICON = {
+  cash: '<rect x="1.5" y="5.5" width="21" height="13" rx="3" fill="#2fbf68"/><rect x="4" y="8" width="16" height="8" rx="1.6" fill="none" stroke="#c8f6d8" stroke-width="1.3"/><circle cx="12" cy="12" r="2.7" fill="#eafff0"/>',
+  star: '<path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z" fill="#ffd23f"/>',
+  pause: '<rect x="5.5" y="4" width="4.5" height="16" rx="1.4" fill="currentColor"/><rect x="14" y="4" width="4.5" height="16" rx="1.4" fill="currentColor"/>',
+  play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>',
+  ff: '<path d="M3 5v14l9-7zM12 5v14l9-7z" fill="currentColor"/>',
+  fff: '<path d="M1 6v12l7-6zM8.5 6v12l7-6zM16 6v12l7-6z" fill="currentColor"/>',
+  gear: '<circle cx="12" cy="12" r="8.3" fill="none" stroke="currentColor" stroke-width="3.6" stroke-dasharray="3.6 2.92"/><circle cx="12" cy="12" r="6.6" fill="currentColor"/><circle cx="12" cy="12" r="2.7" fill="#101a36"/>',
+  hammer: '<path d="M13 3.5 21 8l-2 3-3.2-1.8L7 22l-3-2.2 8.8-12.4L11 5.8z" fill="currentColor"/>',
+  doc: '<path d="M6.5 2.5h8L19 7v13.5A1.5 1.5 0 0 1 17.5 22h-11A1.5 1.5 0 0 1 5 20.5V4A1.5 1.5 0 0 1 6.5 2.5z" fill="currentColor"/><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4.5" stroke="#2f6bff" stroke-width="1.8" stroke-linecap="round"/>',
+  users: '<circle cx="9" cy="8" r="3.6" fill="currentColor"/><path d="M2.5 20c.5-4 3.2-6.2 6.5-6.2s6 2.2 6.5 6.2z" fill="currentColor"/><circle cx="17" cy="9" r="2.8" fill="currentColor" opacity=".75"/><path d="M15.5 14.2c3.2-.4 5.7 1.6 6 5.8h-4.4c-.2-2.5-.8-4.3-1.6-5.8z" fill="currentColor" opacity=".75"/>',
+  chart: '<rect x="3" y="12" width="4" height="9" rx="1" fill="currentColor"/><rect x="10" y="7" width="4" height="14" rx="1" fill="currentColor"/><rect x="17" y="3" width="4" height="18" rx="1" fill="currentColor"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/>',
+  apps: '<rect x="3" y="3" width="8" height="8" rx="2" fill="#e5533d"/><rect x="13" y="3" width="8" height="8" rx="2" fill="#4a7ee0"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#f2c14e"/><rect x="13" y="13" width="8" height="8" rx="2" fill="#5fae4f"/>',
+  check: '<path d="M4.5 12.5l5 5 10-11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>',
+  rotate: '<path d="M19 12a7 7 0 1 1-2.1-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M19.5 3.5v5h-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  flag: '<path d="M6 21V3" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M6 4h12l-2.5 4 2.5 4H6z" fill="currentColor"/>',
+  alert: '<path d="M12 3 1.8 20.5h20.4z" fill="currentColor"/><path d="M12 9.5v5.2" stroke="#e0393f" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.3" fill="#e0393f"/>',
+  sun: '<circle cx="12" cy="12" r="4.6" fill="#ffd23f"/><g stroke="#ffd23f" stroke-width="2.2" stroke-linecap="round"><path d="M12 2v2.6M12 19.4V22M2 12h2.6M19.4 12H22M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M4.9 19.1l1.9-1.9M17.2 6.8l1.9-1.9"/></g>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="#dfe6ff"/>',
+};
+const ico = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+document.querySelectorAll('[data-i]').forEach(e => { e.outerHTML = ico(e.dataset.i); });
+
+// ======================= utils =======================
+const UNITS = ['K', 'M', 'B', 'T'];
+function fmt(v) {
+  if (!isFinite(v)) return '0';
+  const a = Math.abs(v), s = v < 0 ? '-' : '';
+  if (a < 10000) return s + Math.floor(a).toLocaleString('en-US');
+  let x = a, i = -1;
+  while (x >= 1000 && i < UNITS.length - 1) { x /= 1000; i++; }
+  return s + (x >= 100 ? Math.floor(x) : (Math.floor(x * 10) / 10).toFixed(1)) + UNITS[i];
+}
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+function pickW(list) { let s = list.reduce((a, x) => a + x[1], 0) * Math.random(); for (const [v, w] of list) { s -= w; if (s <= 0) return v; } return list[0][0]; }
+function seeded(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const starsTxt = n => '★'.repeat(n) + '<span style="opacity:.25">' + '★'.repeat(5 - n) + '</span>';
+const FONT = '"Baloo Bhaijaan 2", system-ui, sans-serif';
+
+// ======================= game data =======================
+const DAY = 40;                       // real seconds per day at 1×
+const LOT_W = 14, LOT_D = 12;
+const ENTR = [1, 11];                 // entrance cell (south edge)
+const PER_STAR = 12;                  // points / day per star
+const FREELANCE = 1.5;                // $ per point no contract needs
+const PT = {
+  S: { name: 'مبيعات', col: '#22a06b' },
+  G: { name: 'تصميم', col: '#9a4fd0' },
+  M: { name: 'تسويق', col: '#e0455f' },
+  D: { name: 'برمجة', col: '#1aa6c4' },
+};
+const TYPES = {
+  sales:  { name: 'المبيعات', ico: '🤝', kind: 'prod', pt: 'S', w: 4, d: 3, cost: 800, upkeep: 25, rep: 0, floor: 0xcfc6a0, wall: 0xb8e2c9, shirt: 0x22a06b, acc: 0x22a06b,
+            fx: 'تنتج نقاط مبيعات. +20٪ قرب المدخل.' },
+  design: { name: 'التصميم', ico: '🎨', kind: 'prod', pt: 'G', w: 4, d: 3, cost: 1200, upkeep: 30, rep: 0, floor: 0xefdcb6, wall: 0xdcc5f2, shirt: 0x9a4fd0, acc: 0x9a4fd0,
+            fx: 'تنتج نقاط تصميم. +15٪ بجانب التسويق.' },
+  market: { name: 'التسويق', ico: '📣', kind: 'prod', pt: 'M', w: 4, d: 3, cost: 1000, upkeep: 30, rep: 1, floor: 0xe8c4c4, wall: 0xf6c9cf, shirt: 0xe0455f, acc: 0xe0455f,
+            fx: 'تنتج نقاط تسويق. صاخبة: تزعج البرمجة.' },
+  dev:    { name: 'البرمجة', ico: '💻', kind: 'prod', pt: 'D', w: 4, d: 3, cost: 1500, upkeep: 40, rep: 2, floor: 0x8590ad, wall: 0x9fd8ea, shirt: 0x26303f, acc: 0x1aa6c4,
+            fx: 'تنتج نقاط برمجة. تحتاج هدوء وخوادم قريبة.' },
+  break:  { name: 'الاستراحة', ico: '☕', kind: 'sup', w: 3, d: 3, cost: 900, upkeep: 20, rep: 0, floor: 0xd6a878, wall: 0xf4dc8f, acc: 0xe9832f,
+            fx: 'مزاج +15 لكل الأقسام في محيط 6 خانات.' },
+  meet:   { name: 'الاجتماعات', ico: '🗂️', kind: 'sup', w: 3, d: 3, cost: 1100, upkeep: 20, rep: 1, floor: 0xa9c2d6, wall: 0x9cb8e4, acc: 0x2f6bff,
+            fx: 'عقد إضافي في نفس الوقت، و+10٪ للأقسام الملاصقة.' },
+  server: { name: 'الخوادم', ico: '🖥️', kind: 'sup', w: 3, d: 3, cost: 2000, upkeep: 50, rep: 3, floor: 0x5b6072, wall: 0xa9b2c4, acc: 0x26303f,
+            fx: '+30٪ لأقسام البرمجة في محيط 6 خانات.' },
+};
+const TYPE_ORDER = ['sales', 'design', 'market', 'dev', 'break', 'meet', 'server'];
+const FAC = {
+  parking: { name: 'موقف سيارات', ico: '🅿️', cap: 6, cost: 600, upkeep: 15, rep: 0, max: 3, fx: '+6 موظفين يقدرون يوصلون.' },
+  bus:     { name: 'خط باص', ico: '🚌', cap: 12, cost: 1500, upkeep: 40, rep: 2, max: 1, fx: '+12 موظفاً يوصلون بالباص.' },
+  metro:   { name: 'محطة مترو', ico: '🚇', cap: 40, cost: 12000, upkeep: 150, rep: 4, max: 1, fx: '+40 موظفاً يوصلون بالمترو.' },
+};
+const PLOTS = [
+  { id: 'base', name: 'المساحة الأساسية', x0: 0, z0: 4, x1: 8, z1: 12, cost: 0, rep: 0 },
+  { id: 'east', name: 'الجناح الشرقي', x0: 8, z0: 4, x1: 14, z1: 12, cost: 6000, rep: 1 },
+  { id: 'north', name: 'الجناح الشمالي', x0: 0, z0: 0, x1: 14, z1: 4, cost: 20000, rep: 2 },
+];
+const TRAITS = {
+  none:  { n: 'عادي', e: '🙂', d: 'بدون صفات خاصة.', out: 1, sal: 1 },
+  fast:  { n: 'سريع', e: '⚡', d: 'إنتاجه +25٪، وراتبه أعلى قليلاً.', out: 1.25, sal: 1.15 },
+  cheer: { n: 'مرح', e: '😄', d: 'يرفع مزاج زملائه في القسم +8.', out: 1, sal: 1 },
+  lazy:  { n: 'كسول', e: '😴', d: 'إنتاجه −25٪ لكن راتبه أقل بكثير.', out: .75, sal: .62 },
+  learn: { n: 'يتطور', e: '📈', d: 'يكسب نجمة كل 3 أيام حتى 5 نجوم.', out: 1, sal: 1.05 },
+};
+const NM = ['أحمد', 'خالد', 'فهد', 'عمر', 'سلمان', 'ماجد', 'يوسف', 'ناصر', 'تركي', 'بدر', 'سعد', 'ريان', 'عبدالله', 'فيصل', 'زياد', 'مشعل'];
+const NF = ['سارة', 'نورة', 'ريم', 'لمى', 'هيا', 'جود', 'دانة', 'مها', 'شهد', 'غدير', 'رزان', 'أمل', 'لينا', 'منيرة'];
+const CTPL = [
+  { name: 'صفقة توريد', req: { S: 1 }, rep: 0 },
+  { name: 'هوية بصرية', req: { G: 1 }, rep: 0 },
+  { name: 'معرض تجاري', req: { S: .6, G: .4 }, rep: 0 },
+  { name: 'حملة إعلانية', req: { M: .6, G: .4 }, rep: 1 },
+  { name: 'إطلاق منتج', req: { S: .5, M: .5 }, rep: 1 },
+  { name: 'موقع إلكتروني', req: { D: .6, G: .4 }, rep: 2 },
+  { name: 'تطبيق جوال', req: { D: .5, G: .3, M: .2 }, rep: 2 },
+  { name: 'منصة متكاملة', req: { D: .5, S: .2, M: .3 }, rep: 3 },
+];
+const CLIENTS = ['مطاعم الواحة', 'شركة النخبة', 'متجر لمسة', 'مستشفى الرعاية', 'بنك الأمان', 'فندق الريم', 'نادي الصقور', 'مدارس المستقبل', 'شركة سحاب', 'مجموعة الفرسان', 'مقهى السنابل', 'عيادات بسمة', 'شركة مدار', 'معارض الريادة'];
+
+// ======================= state =======================
+const KEY = 'officeTower.strategy.v1';
+function fresh() {
+  return { v: 1, cash: 4000, rep: 0, day: 1, t: 0, speed: 1, rooms: [], emps: [], nid: 1,
+    fac: { parking: 0, bus: 0, metro: 0 }, plots: { base: true }, offers: [], contracts: [], hist: [],
+    today: { inc: 0, exp: 0 }, goal: 0, negDays: 0, stats: { done: 0, failed: 0 }, cands: {},
+    won: false, over: false, sound: true, lastProfit: 0 };
+}
+let S = fresh();
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (!d || d.v !== 1 || !Array.isArray(d.rooms)) return false;
+    S = Object.assign(fresh(), d);
+    return true;
+  } catch (e) { return false; }
+}
+
+// ======================= geometry of rooms =======================
+const ROT = r => -r * Math.PI / 2;
+function dims(type, r) { const T = TYPES[type]; return r % 2 ? [T.d, T.w] : [T.w, T.d]; }
+const R3 = v => Math.round(v * 1000) / 1000;
+function roomFrame(room) {
+  const T = TYPES[room.type], th = ROT(room.r), c = Math.cos(th), s = Math.sin(th);
+  let mx = Infinity, mz = Infinity;
+  for (const [u, v] of [[0, 0], [T.w, 0], [0, T.d], [T.w, T.d]]) { mx = Math.min(mx, R3(u * c + v * s)); mz = Math.min(mz, R3(-u * s + v * c)); }
+  return { c, s, th, ox: room.x - mx, oz: room.z - mz };
+}
+function l2w(room, u, v) { const f = roomFrame(room); return [R3(u * f.c + v * f.s + f.ox), R3(-u * f.s + v * f.c + f.oz)]; }
+function rotVec(room, du, dv) { const f = roomFrame(room); return [R3(du * f.c + dv * f.s), R3(-du * f.s + dv * f.c)]; }
+function doorInfo(room) {
+  const T = TYPES[room.type], p = l2w(room, T.w / 2, T.d), n = rotVec(room, 0, 1);
+  const cell = [Math.floor(p[0] + n[0] * .5 + (n[0] === 0 ? .001 : 0)), Math.floor(p[1] + n[1] * .5 + (n[1] === 0 ? .001 : 0))];
+  return { p, n, cell };
+}
+function center(room) { const [w, d] = dims(room.type, room.r); return [room.x + w / 2, room.z + d / 2]; }
+function dist(a, b) { const p = center(a), q = center(b); return Math.hypot(p[0] - q[0], p[1] - q[1]); }
+function adjacent(a, b) {
+  const [aw, ad] = dims(a.type, a.r), [bw, bd] = dims(b.type, b.r);
+  const ax1 = a.x + aw, az1 = a.z + ad, bx1 = b.x + bw, bz1 = b.z + bd;
+  const ovX = Math.min(ax1, bx1) - Math.max(a.x, b.x), ovZ = Math.min(az1, bz1) - Math.max(a.z, b.z);
+  return (ovX > 0 && (az1 === b.z || bz1 === a.z)) || (ovZ > 0 && (ax1 === b.x || bx1 === a.x));
+}
+// desks of production rooms (local u, v); the seat is on the +v side, monitor faces -v
+const DESKS = [[1, .85], [3, .85], [1, 2.1], [3, 2.1]];
+function seatOf(room, k) {
+  const [u, v] = DESKS[k], p = l2w(room, u, v + .55), f = rotVec(room, 0, -1);
+  return { x: p[0], z: p[1], a: Math.atan2(f[0], f[1]) };
+}
+const plotOf = (x, z) => PLOTS.find(p => x >= p.x0 && x < p.x1 && z >= p.z0 && z < p.z1);
+const cellUnlocked = (x, z) => { const p = plotOf(x, z); return !!(p && S.plots[p.id]); };
+
+function buildOcc(excludeId, extra) {
+  const occ = [];
+  for (let z = 0; z < LOT_D; z++) { occ.push([]); for (let x = 0; x < LOT_W; x++) occ[z].push(cellUnlocked(x, z) ? 0 : -1); }
+  const put = r => { const [w, d] = dims(r.type, r.r); for (let z = r.z; z < r.z + d; z++) for (let x = r.x; x < r.x + w; x++) if (occ[z] && occ[z][x] !== undefined) occ[z][x] = r.id; };
+  for (const r of S.rooms) if (r.id !== excludeId) put(r);
+  if (extra) put(extra);
+  return occ;
+}
+function bfs(occ, from) {
+  const D = occ.map(r => r.map(() => -1)), P = occ.map(r => r.map(() => null)), q = [from];
+  if (occ[from[1]][from[0]] !== 0) return { D, P };
+  D[from[1]][from[0]] = 0;
+  while (q.length) {
+    const [x, z] = q.shift();
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, nz = z + dz;
+      if (nz < 0 || nz >= LOT_D || nx < 0 || nx >= LOT_W) continue;
+      if (occ[nz][nx] !== 0 || D[nz][nx] >= 0) continue;
+      D[nz][nx] = D[z][x] + 1; P[nz][nx] = [x, z]; q.push([nx, nz]);
+    }
+  }
+  return { D, P };
+}
+function validate(cand, excludeId) {
+  const [w, d] = dims(cand.type, cand.r);
+  if (cand.x < 0 || cand.z < 0 || cand.x + w > LOT_W || cand.z + d > LOT_D) return 'خارج حدود المكتب';
+  const base = buildOcc(excludeId);
+  for (let z = cand.z; z < cand.z + d; z++) for (let x = cand.x; x < cand.x + w; x++) {
+    if (base[z][x] === -1) return 'هذه المساحة مقفلة، وسّع المكتب أولاً';
+    if (base[z][x] !== 0) return 'يتداخل مع قسم آخر';
+  }
+  const occ = buildOcc(excludeId, Object.assign({ id: -9 }, cand));
+  if (occ[ENTR[1]][ENTR[0]] !== 0) return 'يسد مدخل المكتب';
+  const di = doorInfo(cand), [cx, cz] = di.cell;
+  if (cx < 0 || cz < 0 || cx >= LOT_W || cz >= LOT_D || occ[cz][cx] !== 0) return 'باب القسم مسدود، اترك ممراً أمامه';
+  const { D } = bfs(occ, ENTR);
+  if (D[cz][cx] < 0) return 'لا يوجد ممر من المدخل إلى باب القسم';
+  for (const r of S.rooms) {
+    if (r.id === excludeId) continue;
+    const c = doorInfo(r).cell;
+    if (!occ[c[1]] || occ[c[1]][c[0]] !== 0 || D[c[1]][c[0]] < 0) return `يسد الممر إلى ${TYPES[r.type].name}`;
+  }
+  return '';
+}
+
+// ======================= analysis & economy =======================
+const repLvl = () => Math.floor(S.rep + 1e-9);
+const roomById = id => S.rooms.find(r => r.id === id);
+const empsIn = id => S.emps.filter(e => e.room === id);
+const capacity = () => 4 + FAC.parking.cap * S.fac.parking + FAC.bus.cap * S.fac.bus + FAC.metro.cap * S.fac.metro;
+const shortage = () => Math.max(0, S.emps.length - capacity());
+const slots = () => Math.min(5, 2 + S.rooms.filter(r => r.type === 'meet').length);
+let layoutVer = 0, anVer = -1;
+const AN = new Map();
+function analyze(room, rooms) {
+  const T = TYPES[room.type], lines = [];
+  let mult = 1, breakNear = false;
+  if (T.kind !== 'prod') return { mult, lines, breakNear };
+  const others = rooms.filter(o => o.id !== room.id);
+  const adjT = t => others.some(o => o.type === t && adjacent(room, o));
+  const meets = others.filter(o => o.type === 'meet' && adjacent(room, o)).length;
+  if (meets) { const v = .1 * Math.min(2, meets); mult += v; lines.push(['ملاصق لغرفة اجتماعات', v]); }
+  if (room.type === 'design' && adjT('market')) { mult += .15; lines.push(['بجانب التسويق', .15]); }
+  if (room.type === 'market' && adjT('design')) { mult += .15; lines.push(['بجانب التصميم', .15]); }
+  if (room.type === 'dev' && (adjT('sales') || adjT('market'))) { mult -= .15; lines.push(['ضجيج من قسم ملاصق', -.15]); }
+  if (room.type === 'sales') { const c = center(room); if (Math.hypot(c[0] - 1.5, c[1] - 11.5) <= 5) { mult += .2; lines.push(['قريب من المدخل', .2]); } }
+  if (room.type === 'dev' && others.some(o => o.type === 'server' && dist(room, o) <= 6.5)) { mult += .3; lines.push(['خوادم قريبة', .3]); }
+  if (others.some(o => o.type === 'break' && dist(room, o) <= 6.5)) { breakNear = true; lines.push(['استراحة قريبة: مزاج +15', 'mood']); }
+  return { mult, lines, breakNear };
+}
+function A(room) {
+  if (anVer !== layoutVer) { AN.clear(); for (const r of S.rooms) AN.set(r.id, analyze(r, S.rooms)); anVer = layoutVer; }
+  return AN.get(room.id) || analyze(room, S.rooms);
+}
+function morale(e) {
+  const r = roomById(e.room); if (!r) return 60;
+  let m = 62;
+  if (A(r).breakNear) m += 15;
+  m += 8 * Math.min(2, empsIn(r.id).filter(x => x.id !== e.id && x.trait === 'cheer').length);
+  if (shortage() > 0) m -= 25;
+  return clamp(m, 0, 100);
+}
+const moodF = m => clamp(m / 80, .5, 1.25);
+const face = m => m >= 80 ? '😄' : m >= 62 ? '🙂' : m >= 45 ? '😐' : '😠';
+function empRate(e) { const r = roomById(e.room); return r ? PER_STAR * e.stars * TRAITS[e.trait].out * A(r).mult * moodF(morale(e)) : 0; }
+function rates() { const o = { S: 0, G: 0, M: 0, D: 0 }; for (const e of S.emps) { const r = roomById(e.room); if (r) o[TYPES[r.type].pt] += empRate(e); } return o; }
+const roomRate = r => empsIn(r.id).reduce((a, e) => a + empRate(e), 0);
+const salaries = () => S.emps.reduce((a, e) => a + e.salary, 0);
+const upkeep = () => S.rooms.reduce((a, r) => a + TYPES[r.type].upkeep, 0) + Object.keys(FAC).reduce((a, k) => a + FAC[k].upkeep * S.fac[k], 0);
+const assets = () => S.rooms.reduce((a, r) => a + TYPES[r.type].cost, 0) + Object.keys(FAC).reduce((a, k) => a + FAC[k].cost * S.fac[k], 0) + PLOTS.reduce((a, p) => a + (S.plots[p.id] ? p.cost : 0), 0);
+function avgProfit() { const h = S.hist.slice(-3); return h.length ? h.reduce((a, d) => a + d.inc - d.exp, 0) / h.length : 0; }
+const value = () => Math.max(0, S.cash + assets() * .6 + Math.max(0, avgProfit()) * 15 + S.rep * 4000);
+
+// ======================= contracts =======================
+function genOffer() {
+  const lvl = repLvl(), R = rates();
+  const pool = CTPL.filter(c => c.rep <= lvl);
+  const have = new Set(S.rooms.filter(r => TYPES[r.type].kind === 'prod').map(r => TYPES[r.type].pt));
+  const fit = pool.filter(c => Object.keys(c.req).every(t => have.has(t)));
+  const tpl = fit.length && Math.random() < .75 ? pick(fit) : pick(pool);
+  const days = 2 + Math.floor(Math.random() * 4);
+  const types = Object.keys(tpl.req);
+  const rate = types.reduce((a, t) => a + R[t], 0);
+  const per = Math.max(35 + lvl * 25, rate * .85);
+  const total = Math.max(30, Math.round(per * days * rnd(.55, 1.0) / 10) * 10);
+  const req = {};
+  types.forEach(t => { req[t] = Math.max(10, Math.round(total * tpl.req[t] / 5) * 5); });
+  const sum = types.reduce((a, t) => a + req[t], 0);
+  const pay = Math.round(sum * (4.3 + lvl * .55) * rnd(.9, 1.18) / 10) * 10;
+  return { id: S.nid++, client: pick(CLIENTS), name: tpl.name, req, days, pay, rep: Math.round((.12 + Math.min(.38, sum / 1400)) * 100) / 100, exp: 2 };
+}
+// days needed to finish `req`, given that the first `ahead` active contracts are served first
+function etaDays(req, ahead) {
+  const R = rates(); let worst = 0;
+  for (const t of Object.keys(req)) {
+    let need = req[t];
+    for (let i = 0; i < ahead; i++) { const c = S.contracts[i]; need += Math.max(0, (c.req[t] || 0) - (c.prog[t] || 0)); }
+    if (need <= 0) continue;
+    worst = Math.max(worst, R[t] > 0 ? need / R[t] : Infinity);
+  }
+  return worst;
+}
+function acceptOffer(id) {
+  const o = S.offers.find(x => x.id === id);
+  if (!o || S.contracts.length >= slots()) return;
+  S.offers.splice(S.offers.indexOf(o), 1);
+  S.contracts.push(Object.assign({}, o, { prog: {} }));
+  snd('buy'); toast(`قبلت عقد «${o.name}»`); save();
+}
+function earn(v) { S.cash += v; S.today.inc += v; }
+function completeContract(c) {
+  S.contracts.splice(S.contracts.indexOf(c), 1);
+  earn(c.pay); S.rep = Math.min(5, S.rep + c.rep); S.stats.done++;
+  snd('win'); toast(`أنجزت «${c.name}»: +${fmt(c.pay)} وسمعة +${c.rep}`, 'g');
+  const p = $('pCash').getBoundingClientRect(), a = $('app').getBoundingClientRect();
+  coinBurst(W / 2, H * .45, p.left - a.left + 30, p.top - a.top + 18, 14);
+  save();
+}
+
+// ======================= employees =======================
+function genCand() {
+  const lvl = repLvl();
+  const stars = clamp(Math.round(.8 + lvl * .6 + Math.random() * 2.3), 1, 5);
+  const trait = pickW([['none', .44], ['fast', .15], ['cheer', .15], ['lazy', .13], ['learn', .13]]);
+  const f = Math.random() < .45;
+  const salary = Math.round((10 + stars * 14 + rnd(-4, 6)) * TRAITS[trait].sal);
+  return { name: pick(f ? NF : NM), f, stars, trait, salary };
+}
+function cands(type) { if (!S.cands[type]) S.cands[type] = [genCand(), genCand(), genCand()]; return S.cands[type]; }
+function hire(roomId, ci) {
+  const r = roomById(roomId); if (!r) return;
+  const list = cands(r.type), c = list[ci];
+  if (!c || empsIn(roomId).length >= 4) return;
+  if (!spend(c.salary * 2)) return;
+  const used = new Set(empsIn(roomId).map(e => e.desk));
+  let desk = 0; while (used.has(desk)) desk++;
+  const e = { id: S.nid++, name: c.name, f: c.f, stars: c.stars, trait: c.trait, salary: c.salary, room: roomId, desk, days: 0 };
+  S.emps.push(e); list.splice(ci, 1);
+  snd('buy'); toast(`انضم ${c.name} إلى ${TYPES[r.type].name}`);
+  spawnWalker(e); save();
+}
+function reroll(type) { if (!spend(100)) return; S.cands[type] = [genCand(), genCand(), genCand()]; snd('tap'); }
+function fireEmp(id) {
+  const e = S.emps.find(x => x.id === id); if (!e) return;
+  S.cash -= e.salary; S.today.exp += e.salary;
+  S.emps.splice(S.emps.indexOf(e), 1); removeWalker(id);
+  toast(`غادر ${e.name} (تعويض ${fmt(e.salary)})`); save();
+}
+
+// ======================= building =======================
+function spend(c) { if (S.cash < c) { snd('no'); toast('المال لا يكفي', 'r'); return false; } S.cash -= c; return true; }
+function buyFac(k) {
+  const F = FAC[k];
+  if (S.fac[k] >= F.max || repLvl() < F.rep || !spend(F.cost)) return;
+  S.fac[k]++; snd('build'); toast(`${F.name}: السعة الآن ${capacity()} موظفاً`, 'g'); save();
+}
+function buyPlot(id) {
+  const p = PLOTS.find(x => x.id === id);
+  if (!p || S.plots[id] || repLvl() < p.rep || !spend(p.cost)) return;
+  S.plots[id] = true; layoutVer++; snd('build'); toast(`تمت التوسعة: ${p.name}`, 'g'); save();
+  focusOn((p.x0 + p.x1) / 2, (p.z0 + p.z1) / 2);
+}
+function demolish(id) {
+  const r = roomById(id); if (!r) return;
+  for (const e of empsIn(id)) { S.emps.splice(S.emps.indexOf(e), 1); removeWalker(e.id); }
+  S.rooms.splice(S.rooms.indexOf(r), 1);
+  const back = Math.round(TYPES[r.type].cost * .5); S.cash += back;
+  layoutVer++; toast(`هُدم القسم واسترجعت ${fmt(back)}`); save();
+}
+
+// ======================= goals =======================
+const has = t => S.rooms.some(r => r.type === t);
+const countIn = t => S.emps.filter(e => { const r = roomById(e.room); return r && r.type === t; }).length;
+const GOALS = [
+  { t: 'ابنِ قسم المبيعات قرب المدخل', ok: () => has('sales'), rw: 300 },
+  { t: 'اضغط القسم ووظّف موظفَين', ok: () => countIn('sales') >= 2, rw: 300 },
+  { t: 'اقبل عقداً من لوحة العقود', ok: () => S.contracts.length > 0 || S.stats.done > 0, rw: 200 },
+  { t: 'أنجز أول عقد قبل موعده', ok: () => S.stats.done >= 1, rw: 500 },
+  { t: 'ابنِ غرفة استراحة قريبة من الموظفين', ok: () => has('break'), rw: 400 },
+  { t: 'ابنِ موقف سيارات قبل أن تمتلئ المواصلات', ok: () => S.fac.parking >= 1, rw: 300 },
+  { t: 'ارفع السمعة إلى نجمة واحدة', ok: () => S.rep >= 1, rw: 800 },
+  { t: 'ضع التصميم ملاصقاً للتسويق', ok: () => S.rooms.some(a => a.type === 'design' && S.rooms.some(b => b.type === 'market' && adjacent(a, b))), rw: 1000 },
+  { t: 'وسّع المكتب: الجناح الشرقي', ok: () => !!S.plots.east, rw: 1500 },
+  { t: 'حقق ربحاً يومياً 1,500', ok: () => S.lastProfit >= 1500, rw: 1500 },
+  { t: 'افتح قسم البرمجة بعيداً عن الضجيج', ok: () => S.rooms.some(r => r.type === 'dev' && !A(r).lines.some(l => l[1] === -.15)), rw: 3000 },
+  { t: 'وظّف 20 موظفاً', ok: () => S.emps.length >= 20, rw: 4000 },
+  { t: 'ضع خوادم قرب البرمجة', ok: () => S.rooms.some(r => r.type === 'dev' && A(r).lines.some(l => l[1] === .3)), rw: 6000 },
+  { t: 'ارفع السمعة إلى 4 نجوم', ok: () => S.rep >= 4, rw: 20000 },
+  { t: 'وصّل قيمة الشركة إلى مليون', ok: () => value() >= 1e6, rw: 0 },
+];
+function claimGoal() {
+  const g = GOALS[S.goal]; if (!g) return;
+  if (!g.ok()) { snd('tap'); toast(g.t); return; }
+  if (g.rw) earn(g.rw);
+  S.goal++; snd('win');
+  if (S.goal >= GOALS.length && !S.won) { S.won = true; openSheet({ kind: 'win' }); }
+  else toast(g.rw ? `هدف محقق! +${fmt(g.rw)}` : 'هدف محقق!', 'g');
+  save();
+}
+
+// ======================= day cycle =======================
+function simulate(dt) {
+  S.t += dt;
+  const R = rates(), frac = dt / DAY;
+  for (const t in R) {
+    let pts = R[t] * frac;
+    if (pts <= 0) continue;
+    for (const c of S.contracts) {
+      const need = (c.req[t] || 0) - (c.prog[t] || 0);
+      if (need > 0) { const take = Math.min(need, pts); c.prog[t] = (c.prog[t] || 0) + take; pts -= take; if (pts <= 1e-9) break; }
+    }
+    if (pts > 0) earn(pts * FREELANCE);
+  }
+  for (const c of [...S.contracts]) if (Object.keys(c.req).every(t => (c.prog[t] || 0) >= c.req[t] - 1e-6)) completeContract(c);
+  if (S.t >= DAY) endDay();
+}
+function endDay() {
+  const exp = salaries() + upkeep();
+  S.cash -= exp; S.today.exp += exp;
+  const inc = Math.round(S.today.inc), out = Math.round(S.today.exp), profit = inc - out;
+  S.lastProfit = profit;
+  S.hist.push({ d: S.day, inc, exp: out }); if (S.hist.length > 14) S.hist.shift();
+  for (const c of [...S.contracts]) {
+    c.days--;
+    if (c.days <= 0) { S.contracts.splice(S.contracts.indexOf(c), 1); S.rep = Math.max(0, S.rep - .3); S.stats.failed++; toast(`فشل عقد «${c.name}»: السمعة −0.3`, 'r'); snd('no'); }
+  }
+  for (const o of [...S.offers]) { o.exp--; if (o.exp <= 0) S.offers.splice(S.offers.indexOf(o), 1); }
+  while (S.offers.length < 3) S.offers.push(genOffer());
+  for (const e of S.emps) { e.days++; if (e.trait === 'learn' && e.stars < 5 && e.days % 3 === 0) { e.stars++; toast(`${e.name} تطور إلى ${e.stars} نجوم`, 'g'); } }
+  S.cands = {};
+  toast(`نهاية اليوم ${S.day}: دخل ${fmt(inc)} − مصاريف ${fmt(out)} = ${profit >= 0 ? '+' : ''}${fmt(profit)}`, profit >= 0 ? '' : 'r');
+  if (S.cash < 0) {
+    S.negDays++;
+    if (S.negDays >= 3) { S.over = true; S.speed = 0; openSheet({ kind: 'over' }); }
+    else toast(`تحذير: رصيدك سالب (${S.negDays}/3). ثلاثة أيام متتالية = إفلاس!`, 'r');
+  } else S.negDays = 0;
+  S.day++; S.t = Math.max(0, S.t - DAY); S.today = { inc: 0, exp: 0 };
+  save();
+}
+
+// ======================= sound =======================
+let AC = null;
+function snd(kind) {
+  if (!S.sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const t = AC.currentTime;
+    const tone = (f, d, delay = 0, type = 'triangle', vol = .06) => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(vol, t + delay); g.gain.exponentialRampToValueAtTime(.0001, t + delay + d);
+      o.connect(g); g.connect(AC.destination); o.start(t + delay); o.stop(t + delay + d + .03);
+    };
+    if (kind === 'buy') { tone(660, .09); tone(990, .12, .07); }
+    else if (kind === 'build') { tone(196, .12, 0, 'square', .04); tone(392, .1, .1); tone(523, .16, .18); }
+    else if (kind === 'win') { [523, 659, 784, 1047].forEach((f, i) => tone(f, .16, i * .09)); }
+    else if (kind === 'no') tone(150, .14, 0, 'sawtooth', .04);
+    else if (kind === 'tap') tone(520, .04, 0, 'sine', .04);
+    else if (kind === 'coin') tone(1318, .07, 0, 'square', .025);
+  } catch (e) {}
+}
+
+// ======================= toast =======================
+function toast(msg, cls = '') {
+  const el = document.createElement('span'); el.textContent = msg; if (cls) el.className = cls;
+  const box = $('toast'); box.appendChild(el);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => el.remove(), 3400);
+}
+
+// ======================= UI: placement =======================
+let mode = 'idle', place = null, resumeSpeed = 1, ghostDirty = true;
+function startPlace(type, movingId) {
+  closeSheet(); closeBuild();
+  resumeSpeed = S.speed;
+  S.speed = 0;
+  mode = 'place';
+  if (movingId) { const r = roomById(movingId); place = { type: r.type, x: r.x, z: r.z, r: r.r, moving: movingId }; }
+  else {
+    const c = screenCell(W / 2, H * .5);
+    const [w, d] = dims(type, 0);
+    place = { type, x: clamp(c[0] - Math.floor(w / 2), 0, LOT_W - w), z: clamp(c[1] - Math.floor(d / 2), 0, LOT_D - d), r: 0, moving: null };
+    if (validate(place, null)) autoSpot();
+  }
+  const c = center(place); focusOn(c[0], c[1]);
+  ghostDirty = true; $('dock').hidden = true; $('goal').hidden = true; $('placebar').hidden = false; updatePlacebar();
+}
+function autoSpot() {
+  let best = null, bd = Infinity;
+  for (let r = 0; r < 4; r++) for (let z = 0; z < LOT_D; z++) for (let x = 0; x < LOT_W; x++) {
+    const c = { type: place.type, x, z, r };
+    const [w, d] = dims(place.type, r);
+    if (x + w > LOT_W || z + d > LOT_D) continue;
+    if (validate(c, place.moving)) continue;
+    const dd = Math.hypot(x - place.x, z - place.z) + r * .3;
+    if (dd < bd) { bd = dd; best = c; }
+  }
+  if (best) Object.assign(place, best);
+}
+function exitPlace() {
+  mode = 'idle'; place = null; ghostDirty = true;
+  $('placebar').hidden = true; $('dock').hidden = false;
+  S.speed = resumeSpeed; updateHud();
+}
+function confirmPlace() {
+  if (!place) return;
+  const why = validate(place, place.moving);
+  if (why) { snd('no'); toast(why, 'r'); return; }
+  let built = null;
+  if (place.moving) {
+    const r = roomById(place.moving); r.x = place.x; r.z = place.z; r.r = place.r;
+    layoutVer++; snd('build'); toast('تم نقل القسم'); reseatRoom(r.id);
+  } else {
+    if (!spend(TYPES[place.type].cost)) return;
+    built = { id: S.nid++, type: place.type, x: place.x, z: place.z, r: place.r };
+    S.rooms.push(built); layoutVer++; snd('build');
+    toast(`تم بناء ${TYPES[built.type].name}`, 'g');
+    roomPop.set(built.id, T);
+  }
+  save(); exitPlace();
+  if (built && TYPES[built.type].kind === 'prod') setTimeout(() => openSheet({ kind: 'hire', id: built.id }), 350);
+}
+function updatePlacebar() {
+  if (!place) return;
+  const T0 = TYPES[place.type];
+  $('pTitle').textContent = (place.moving ? 'نقل: ' : '') + T0.ico + ' ' + T0.name;
+  const why = validate(place, place.moving);
+  let h = '';
+  if (why) h += `<div class="pline no">${ico('alert')}${why}</div>`;
+  else {
+    const others = S.rooms.filter(r => r.id !== place.moving);
+    const cand = Object.assign({ id: -9 }, place);
+    const all = others.concat([cand]);
+    const lines = analyze(cand, all).lines.map(([t, v]) => [typeof v === 'number' ? `${t} ${v > 0 ? '+' : ''}${Math.round(v * 100)}٪` : t, v]);
+    for (const o of others) {
+      if (TYPES[o.type].kind !== 'prod') continue;
+      const a = analyze(o, others), b = analyze(o, all);
+      const dm = Math.round((b.mult - a.mult) * 100);
+      if (dm) lines.push([`${TYPES[o.type].name} المجاور: ${dm > 0 ? '+' : ''}${dm}٪`, dm / 100]);
+      if (b.breakNear && !a.breakNear) lines.push([`${TYPES[o.type].name}: مزاج +15`, 'mood']);
+    }
+    if (!lines.length) h += `<div class="pline mid">${ico('check')}مكان صالح. ${T0.kind === 'prod' ? 'لا توجد مكافآت مكان هنا.' : 'لا يستفيد منه أي قسم هنا.'}</div>`;
+    lines.slice(0, 4).forEach(([t, v]) => { const neg = typeof v === 'number' && v < 0; h += `<div class="pline ${neg ? 'no' : 'ok'}">${neg ? '▼' : '▲'} ${t}</div>`; });
+  }
+  $('pInfo').innerHTML = h;
+  $('pOk').disabled = !!why || (!place.moving && S.cash < T0.cost);
+  $('pOkT').textContent = place.moving ? 'انقل هنا' : `ابنِ · ${fmt(T0.cost)}`;
+}
+$('pRot').addEventListener('click', () => {
+  if (!place) return;
+  const [w0, d0] = dims(place.type, place.r);
+  const cx = place.x + w0 / 2, cz = place.z + d0 / 2;
+  place.r = (place.r + 1) % 4;
+  const [w, d] = dims(place.type, place.r);
+  place.x = clamp(Math.round(cx - w / 2), 0, LOT_W - w); place.z = clamp(Math.round(cz - d / 2), 0, LOT_D - d);
+  ghostDirty = true; snd('tap'); updatePlacebar();
+});
+$('pCancel').addEventListener('click', exitPlace);
+$('pOk').addEventListener('click', confirmPlace);
+
+// ======================= UI: build tray =======================
+function openBuild() {
+  closeSheet();
+  const lvl = repLvl();
+  const card = (attrs, tint, icon, name, fxText, price, up, lock, disabled) =>
+    `<button class="bcard" ${attrs} ${disabled ? 'disabled' : ''}>${lock ? `<span class="lock">${lock}</span>` : ''}<span class="ti" style="background:${tint}">${icon}</span><b>${name}</b><span class="fx">${fxText}</span><span class="pr">${ico('cash')}${price}</span><span class="up">${up}</span></button>`;
+  let h = '<div class="sec">الأقسام المنتجة</div><div class="bscroll">';
+  for (const k of TYPE_ORDER.filter(k => TYPES[k].kind === 'prod')) {
+    const T0 = TYPES[k], lock = lvl < T0.rep ? '⭐' + T0.rep : '';
+    h += card(`data-type="${k}"`, hex(T0.acc), T0.ico, T0.name, T0.fx, fmt(T0.cost), `صيانة ${T0.upkeep}/يوم`, lock, !!lock);
+  }
+  h += '</div><div class="sec">غرف الدعم</div><div class="bscroll">';
+  for (const k of TYPE_ORDER.filter(k => TYPES[k].kind === 'sup')) {
+    const T0 = TYPES[k], lock = lvl < T0.rep ? '⭐' + T0.rep : '';
+    h += card(`data-type="${k}"`, hex(T0.acc), T0.ico, T0.name, T0.fx, fmt(T0.cost), `صيانة ${T0.upkeep}/يوم`, lock, !!lock);
+  }
+  h += `</div><div class="sec">المواصلات (${S.emps.length}/${capacity()}) والتوسعة</div><div class="bscroll">`;
+  for (const k of Object.keys(FAC)) {
+    const F = FAC[k], max = S.fac[k] >= F.max, lock = lvl < F.rep ? '⭐' + F.rep : max ? 'مكتمل' : '';
+    h += card(`data-fac="${k}"`, '#4b5368', F.ico, F.name + (F.max > 1 ? ` (${S.fac[k]}/${F.max})` : ''), F.fx, fmt(F.cost), `صيانة ${F.upkeep}/يوم`, lock, !!lock);
+  }
+  for (const p of PLOTS) {
+    if (S.plots[p.id]) continue;
+    const lock = lvl < p.rep ? '⭐' + p.rep : '';
+    h += card(`data-plot="${p.id}"`, '#c98a00', '🏗️', p.name, `+${(p.x1 - p.x0) * (p.z1 - p.z0)} خانة لبناء أقسام جديدة.`, fmt(p.cost), 'مرة واحدة', lock, !!lock);
+  }
+  h += '</div>';
+  $('bList').innerHTML = h;
+  $('buildbar').hidden = false; $('dock').hidden = true;
+}
+function closeBuild() { $('buildbar').hidden = true; if (mode !== 'place') $('dock').hidden = false; }
+$('bClose').addEventListener('click', closeBuild);
+$('bList').addEventListener('click', ev => {
+  const b = ev.target.closest('.bcard'); if (!b || b.disabled) return;
+  snd('tap');
+  if (b.dataset.type) {
+    if (S.cash < TYPES[b.dataset.type].cost) { snd('no'); toast('المال لا يكفي', 'r'); return; }
+    startPlace(b.dataset.type, null);
+  } else if (b.dataset.fac) { buyFac(b.dataset.fac); openBuild(); }
+  else if (b.dataset.plot) { closeBuild(); openSheet({ kind: 'plot', id: b.dataset.plot }); }
+});
+
+// ======================= UI: sheets =======================
+let sheet = null, sheetTouch = false;
+const hex = h => '#' + h.toString(16).padStart(6, '0');
+const stat = (k, v) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`;
+const inlineCash = ico('cash').replace('class="i"', 'class="i" style="display:inline-block;vertical-align:-3px"');
+const reqChips = req => Object.keys(req).map(t => `<span class="chip"><i style="background:${PT[t].col}"></i>${PT[t].name} ${req[t]}</span>`).join('');
+
+function renderSheet() {
+  if (!sheet) return;
+  let title = '', h = '';
+  const k = sheet.kind;
+  if (k === 'room') {
+    const r = roomById(sheet.id); if (!r) { closeSheet(); return; }
+    const T0 = TYPES[r.type], a = A(r);
+    title = `${T0.ico} ${T0.name}`;
+    if (T0.kind === 'prod') {
+      const emps = empsIn(r.id), R = roomRate(r);
+      h += `<div class="card">${stat('الإنتاج اليومي', `${Math.round(R)} نقطة ${PT[T0.pt].name}`)}${stat('مضاعف المكان', `${Math.round(a.mult * 100)}٪`)}${stat('صيانة يومية', fmt(T0.upkeep))}`;
+      if (a.lines.length) h += a.lines.map(([t, v]) => `<div class="bonus ${v === 'mood' || v > 0 ? 'p' : 'n'}"><span>${t}</span><span>${v === 'mood' ? '' : (v > 0 ? '+' : '') + Math.round(v * 100) + '٪'}</span></div>`).join('');
+      else h += '<p class="sub">لا توجد مكافآت مكان. جرّب نقله بجانب أقسام تكمّله.</p>';
+      h += '</div><div class="card"><h3>الموظفون</h3>';
+      for (let dsk = 0; dsk < 4; dsk++) {
+        const e = emps.find(x => x.desk === dsk);
+        if (e) {
+          const m = morale(e), conf = sheet.fire === e.id;
+          h += `<div class="erow"><span class="face">${face(m)}</span><span class="nm"><b>${e.name} <span class="stars">${starsTxt(e.stars)}</span></b><span>${TRAITS[e.trait].e} ${TRAITS[e.trait].n} · راتب ${e.salary}/يوم · ${Math.round(empRate(e))} نقطة/يوم</span></span>${conf ? `<button class="btn red sm" data-act="fire" data-arg="${e.id}">تأكيد</button>` : `<button class="btn ghost sm" data-act="askFire" data-arg="${e.id}">فصل</button>`}</div>`;
+        } else h += `<div class="erow"><span class="face">🪑</span><span class="nm"><b>مكتب فارغ</b><span>وظّف أحداً ليبدأ الإنتاج</span></span><button class="btn sm" data-act="hireSheet" data-arg="${r.id}">وظّف</button></div>`;
+      }
+      h += '</div>';
+    } else {
+      h += `<div class="card"><p class="sub">${T0.fx}</p>${stat('صيانة يومية', fmt(T0.upkeep))}`;
+      const affected = S.rooms.filter(o => TYPES[o.type].kind === 'prod' && (
+        (r.type === 'break' && dist(o, r) <= 6.5) || (r.type === 'meet' && adjacent(o, r)) || (r.type === 'server' && o.type === 'dev' && dist(o, r) <= 6.5)));
+      h += affected.length ? `<p class="sub">يستفيد منها: ${affected.map(o => TYPES[o.type].name).join('، ')}</p>` : '<p class="sub" style="color:var(--warn)">لا يستفيد منها أي قسم حالياً. انقلها أقرب.</p>';
+      if (r.type === 'meet') h += stat('العقود المتزامنة', slots());
+      h += '</div>';
+    }
+    h += `<div class="btns"><button class="btn blue" data-act="move" data-arg="${r.id}">نقل</button>${sheet.demo ? `<button class="btn red" data-act="demolish" data-arg="${r.id}">تأكيد الهدم (+${fmt(T0.cost * .5)})</button>` : `<button class="btn ghost" data-act="askDemo">هدم</button>`}</div>`;
+  } else if (k === 'hire') {
+    const r = roomById(sheet.id); if (!r) { closeSheet(); return; }
+    const T0 = TYPES[r.type], a = A(r), full = empsIn(r.id).length >= 4;
+    title = `توظيف في ${T0.name} (${empsIn(r.id).length}/4)`;
+    h += `<p class="sub">رسوم التوظيف = راتب يومين. المرشحون يتجددون كل يوم.</p>`;
+    const willShort = S.emps.length + 1 > capacity();
+    cands(r.type).forEach((c, i) => {
+      const est = Math.round(PER_STAR * c.stars * TRAITS[c.trait].out * a.mult * moodF(62 + (a.breakNear ? 15 : 0) - (willShort ? 25 : 0)));
+      const ratio = est * 4.5 / c.salary;
+      h += `<div class="card"><div class="top"><span class="ti2" style="background:${c.f ? '#d16ba5' : '#4a82ff'}">${c.f ? '👩‍💼' : '👨‍💼'}</span><div><h3>${c.name} <span class="stars">${starsTxt(c.stars)}</span></h3><p class="sub">${TRAITS[c.trait].e} ${TRAITS[c.trait].n}: ${TRAITS[c.trait].d}</p></div></div>
+        <div class="chips"><span class="chip">راتب ${c.salary}/يوم</span><span class="chip">≈ ${est} نقطة/يوم</span><span class="chip ${ratio >= 2.4 ? 'ok' : ratio >= 1.6 ? 'y' : 'no'}">${ratio >= 2.4 ? 'قيمة ممتازة' : ratio >= 1.6 ? 'مقبول' : 'مكلف'}</span></div>
+        <button class="btn" data-act="hire" data-arg="${i}" ${full || S.cash < c.salary * 2 ? 'disabled' : ''}>${full ? 'القسم ممتلئ' : `وظّف · ${fmt(c.salary * 2)}`}</button></div>`;
+    });
+    if (!cands(r.type).length) h += '<p class="sub center">لا يوجد مرشحون اليوم.</p>';
+    if (willShort) h += `<p class="sub" style="color:var(--warn)">المواصلات ممتلئة (${S.emps.length}/${capacity()}). أي توظيف جديد يخفض مزاج الجميع −25 حتى تبني موقفاً أو خط باص.</p>`;
+    h += `<div class="btns"><button class="btn ghost" data-act="reroll" ${S.cash < 100 ? 'disabled' : ''}>مرشحون جدد · 100</button><button class="btn blue" data-act="back" data-arg="${r.id}">القسم</button></div>`;
+  } else if (k === 'contracts') {
+    title = `العقود (${S.contracts.length}/${slots()})`;
+    h += `<p class="sub">النقاط تذهب للعقود حسب ترتيبها. النقاط الزائدة تُباع بـ ${FREELANCE} فقط للنقطة.</p>`;
+    S.contracts.forEach((c, i) => {
+      const rem = {}; for (const t of Object.keys(c.req)) rem[t] = Math.max(0, c.req[t] - (c.prog[t] || 0));
+      const eta = etaDays(rem, i), left = c.days - S.t / DAY, late = eta > left + .01;
+      h += `<div class="card"><div class="top"><div><h3>${c.name}</h3><p class="sub">${c.client} · ${inlineCash} ${fmt(c.pay)} · سمعة +${c.rep}</p></div><span class="chip ${late ? 'no' : 'ok'}">باقي ${left.toFixed(1)} يوم</span></div>`;
+      for (const t of Object.keys(c.req)) {
+        const p = Math.min(1, (c.prog[t] || 0) / c.req[t]);
+        h += `<div class="prow"><span style="width:56px">${PT[t].name}</span><span class="bar"><i style="width:${p * 100}%;background:${PT[t].col}"></i></span><span>${Math.floor(c.prog[t] || 0)}/${c.req[t]}</span></div>`;
+      }
+      h += `<p class="sub" style="color:${late ? 'var(--warn)' : 'var(--go)'}">${isFinite(eta) ? `التقدير: ${eta.toFixed(1)} يوم${late ? '. لن ينتهي في موعده بالإنتاج الحالي!' : ''}` : 'لا يوجد موظفون ينتجون هذه النقاط!'}</p>`;
+      h += `<div class="btns">${i > 0 ? `<button class="btn blue sm" data-act="prio" data-arg="${c.id}">أولوية ▲</button>` : '<span class="chip ok">الأولوية الأولى</span>'}<span class="grow"></span>${sheet.cancel === c.id ? `<button class="btn red sm" data-act="cancelC" data-arg="${c.id}">تأكيد الإلغاء (سمعة −0.2)</button>` : `<button class="btn ghost sm" data-act="askCancel" data-arg="${c.id}">إلغاء</button>`}</div></div>`;
+    });
+    h += '<h3 style="margin:4px 0 0;font-size:16px">عروض جديدة</h3>';
+    if (!S.offers.length) h += '<p class="sub">لا توجد عروض الآن. تصل عروض جديدة كل يوم.</p>';
+    S.offers.forEach(o => {
+      const eta = etaDays(o.req, S.contracts.length), left = o.days - S.t / DAY;
+      const missing = Object.keys(o.req).filter(t => !S.emps.some(e => { const r = roomById(e.room); return r && TYPES[r.type].pt === t; }));
+      const ok = isFinite(eta) && eta <= left;
+      h += `<div class="card"><div class="top"><div><h3>${o.name}</h3><p class="sub">${o.client} · ينتهي العرض بعد ${o.exp === 1 ? 'يوم' : 'يومين'}</p></div><span class="chip y">مهلة ${o.days} أيام</span></div>
+        <div class="chips">${reqChips(o.req)}</div>
+        <div class="chips"><span class="chip ok">${fmt(o.pay)}</span><span class="chip">⭐ +${o.rep}</span><span class="chip ${ok ? 'ok' : 'no'}">${isFinite(eta) ? `يحتاج ≈ ${eta.toFixed(1)} يوم` : 'لا تقدر تنتجه'}</span></div>
+        ${missing.length ? `<p class="sub" style="color:var(--warn)">ينقصك موظفون في: ${missing.map(t => PT[t].name).join('، ')}</p>` : ''}
+        <button class="btn" data-act="accept" data-arg="${o.id}" ${S.contracts.length >= slots() ? 'disabled' : ''}>${S.contracts.length >= slots() ? 'لا يوجد مكان (ابنِ غرفة اجتماعات)' : 'اقبل العقد'}</button></div>`;
+    });
+  } else if (k === 'team') {
+    title = 'الفريق';
+    const cap = capacity(), n = S.emps.length;
+    h += `<div class="card">${stat('الموظفون', n)}${stat('الرواتب اليومية', fmt(salaries()))}${stat('صيانة المباني', fmt(upkeep()))}
+      <div class="prow"><span style="width:70px">المواصلات</span><span class="bar"><i style="width:${Math.min(100, n / cap * 100)}%;background:${n > cap ? 'var(--warn)' : 'var(--go)'}"></i></span><span>${n}/${cap}</span></div>
+      ${n > cap ? '<p class="sub" style="color:var(--warn)">الموظفون يتأخرون في الوصول: المزاج −25 للجميع. ابنِ موقفاً أو خط باص من قائمة البناء.</p>' : '<p class="sub">ابنِ مواصلات قبل أن يتجاوز عدد الموظفين السعة.</p>'}</div>`;
+    if (!n) h += '<p class="sub center">لا يوجد موظفون بعد. ابنِ قسماً ثم اضغطه للتوظيف.</p>';
+    for (const r of S.rooms.filter(r => TYPES[r.type].kind === 'prod')) {
+      const emps = empsIn(r.id);
+      h += `<div class="card"><button class="linkrow" data-act="room" data-arg="${r.id}"><h3>${TYPES[r.type].ico} ${TYPES[r.type].name} · ${emps.length}/4</h3><span class="sub">${Math.round(roomRate(r))} نقطة/يوم ‹</span></button>`;
+      emps.forEach(e => { const m = morale(e); h += `<div class="erow"><span class="face">${face(m)}</span><span class="nm"><b>${e.name} <span class="stars">${starsTxt(e.stars)}</span></b><span>${TRAITS[e.trait].e} ${TRAITS[e.trait].n} · مزاج ${m} · ${e.salary}/يوم</span></span></div>`; });
+      h += '</div>';
+    }
+  } else if (k === 'finance') {
+    title = 'المالية';
+    h += `<div class="card"><h3>اليوم ${S.day}</h3>${stat('الدخل حتى الآن', fmt(S.today.inc))}${stat('مصاريف نهاية اليوم', fmt(salaries() + upkeep()))}${stat('الرصيد', fmt(S.cash))}${stat('قيمة الشركة', fmt(value()))}${S.negDays ? `<p class="sub" style="color:var(--warn)">أيام برصيد سالب: ${S.negDays}/3</p>` : ''}</div>`;
+    h += `<div class="card"><h3>آخر الأيام</h3><canvas class="chart" id="chart"></canvas><p class="sub"><span style="color:var(--go)">■</span> دخل  <span style="color:var(--warn)">■</span> رواتب وصيانة</p></div>`;
+    const R = rates();
+    h += `<div class="card"><h3>الإنتاج اليومي</h3>${Object.keys(PT).map(t => stat(PT[t].name, Math.round(R[t]) + ' نقطة')).join('')}</div>`;
+    h += `<div class="card"><h3>الأهداف</h3>${GOALS.map((g, i) => `<div class="bonus ${i < S.goal ? 'p' : i === S.goal ? '' : 'i'}"><span>${i < S.goal ? '✓' : i === S.goal ? '▶' : '·'} ${g.t}</span><span>${g.rw ? fmt(g.rw) : '🏆'}</span></div>`).join('')}</div>`;
+  } else if (k === 'plot') {
+    const p = PLOTS.find(x => x.id === sheet.id);
+    title = `توسعة: ${p.name}`;
+    const ok = repLvl() >= p.rep;
+    h += `<div class="card"><p class="sub">تضيف ${(p.x1 - p.x0) * (p.z1 - p.z0)} خانة لبناء أقسام جديدة.</p>${stat('التكلفة', fmt(p.cost))}${stat('السمعة المطلوبة', '⭐' + p.rep)}</div>`;
+    h += `<button class="btn" data-act="buyPlot" data-arg="${p.id}" ${!ok || S.cash < p.cost ? 'disabled' : ''}>${ok ? `وسّع · ${fmt(p.cost)}` : `تحتاج سمعة ${p.rep}`}</button>`;
+  } else if (k === 'settings') {
+    title = 'الإعدادات';
+    h += `<div class="btns"><button class="btn blue" data-act="sound">${S.sound ? 'الصوت: شغّال' : 'الصوت: مطفأ'}</button></div>`;
+    h += `<div class="card"><h3>طريقة اللعب</h3><p class="sub">ابنِ الأقسام على المخطط وانتبه للمكان: كل قسم يتأثر بجيرانه. اترك ممرات تصل كل باب بالمدخل. وظّف موظفين، اقبل العقود التي تقدر تنجزها في موعدها، وراقب الرواتب والمواصلات. ثلاثة أيام متتالية برصيد سالب تعني الإفلاس.</p><p class="sub">التقدم محفوظ في هذا المتصفح، واللعبة تتوقف وأنت خارجها.</p></div>`;
+    h += sheet.reset ? `<button class="btn red" data-act="reset">تأكيد: احذف كل شيء وابدأ من جديد</button>` : `<button class="btn ghost" data-act="askReset">ابدأ لعبة جديدة</button>`;
+  } else if (k === 'over') {
+    title = 'أفلست الشركة';
+    h += `<div class="big">📉</div><p class="sub center">ثلاثة أيام متتالية برصيد سالب. وصلت إلى اليوم ${S.day} وأنجزت ${S.stats.done} عقداً.</p><button class="btn" data-act="reset">ابدأ من جديد</button>`;
+  } else if (k === 'win') {
+    title = 'مبروك! شركتك تساوي مليون';
+    h += `<div class="big">🏆</div><p class="sub center">وصلت في ${S.day} يوماً، وأنجزت ${S.stats.done} عقداً. تقدر تكمل اللعب وتكبّر شركتك.</p><button class="btn" data-act="close">أكمل اللعب</button>`;
+  }
+  $('sTitle').textContent = title;
+  $('sClose').hidden = k === 'over';
+  if (h === lastSheetHtml) return;
+  lastSheetHtml = h;
+  const body = $('body'), top = body.scrollTop;
+  body.innerHTML = h;
+  body.scrollTop = top;
+  if (k === 'finance') drawChart();
+}
+let lastSheetHtml = '';
+function drawChart() {
+  const c = $('chart'); if (!c) return;
+  const r = c.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+  c.width = Math.max(1, r.width * dpr); c.height = Math.max(1, r.height * dpr);
+  const g = c.getContext('2d'); g.scale(dpr, dpr);
+  const data = S.hist.slice(-10), w = r.width, h = r.height;
+  g.fillStyle = '#5d6988'; g.font = '700 12px ' + FONT; g.textAlign = 'center';
+  if (!data.length) { g.fillText('تظهر البيانات بعد نهاية أول يوم', w / 2, h / 2); return; }
+  const max = Math.max(1, ...data.map(d => Math.max(d.inc, d.exp)));
+  const bw = w / data.length, base = h - 18;
+  g.strokeStyle = 'rgba(93,105,136,.18)'; g.lineWidth = 1;
+  for (let k = 0; k <= 2; k++) { const y = base - (base - 8) * k / 2; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+  data.forEach((d, i) => {
+    const x = i * bw + bw * .18, bwi = bw * .3;
+    const hi = (base - 8) * d.inc / max, he = (base - 8) * d.exp / max;
+    g.fillStyle = '#19a655'; g.fillRect(x, base - hi, bwi, hi);
+    g.fillStyle = '#e0393f'; g.fillRect(x + bwi + 2, base - he, bwi, he);
+    g.fillStyle = '#5d6988'; g.fillText(d.d, i * bw + bw / 2, h - 4);
+  });
+}
+function openSheet(s) {
+  sheet = s; lastSheetHtml = ''; $('sheet').hidden = false; $('scrim').hidden = false; $('body').scrollTop = 0; renderSheet();
+  if (s.kind === 'room' || s.kind === 'hire') { const r = roomById(s.id); if (r) { const c = center(r); focusOn(c[0], c[1]); } }
+}
+function closeSheet() { if (sheet && sheet.kind === 'over') return; sheet = null; $('sheet').hidden = true; $('scrim').hidden = true; }
+$('sClose').addEventListener('click', closeSheet);
+$('scrim').addEventListener('click', closeSheet);
+$('sheet').addEventListener('pointerdown', () => { sheetTouch = true; });
+addEventListener('pointerup', () => { sheetTouch = false; });
+addEventListener('pointercancel', () => { sheetTouch = false; });
+$('body').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const act = b.dataset.act, arg = b.dataset.arg;
+  if (act === 'askFire') sheet.fire = +arg;
+  else if (act === 'fire') { fireEmp(+arg); sheet.fire = null; }
+  else if (act === 'hireSheet') { snd('tap'); openSheet({ kind: 'hire', id: +arg }); return; }
+  else if (act === 'hire') hire(sheet.id, +arg);
+  else if (act === 'reroll') reroll(roomById(sheet.id).type);
+  else if (act === 'back') { openSheet({ kind: 'room', id: +arg }); return; }
+  else if (act === 'move') { startPlace(null, +arg); return; }
+  else if (act === 'askDemo') sheet.demo = true;
+  else if (act === 'demolish') { demolish(+arg); closeSheet(); return; }
+  else if (act === 'accept') acceptOffer(+arg);
+  else if (act === 'prio') { const c = S.contracts.find(x => x.id === +arg); S.contracts.splice(S.contracts.indexOf(c), 1); S.contracts.unshift(c); snd('tap'); }
+  else if (act === 'askCancel') sheet.cancel = +arg;
+  else if (act === 'cancelC') { const c = S.contracts.find(x => x.id === +arg); if (c) { S.contracts.splice(S.contracts.indexOf(c), 1); S.rep = Math.max(0, S.rep - .2); toast('أُلغي العقد: السمعة −0.2', 'r'); } }
+  else if (act === 'room') { openSheet({ kind: 'room', id: +arg }); return; }
+  else if (act === 'buyPlot') { buyPlot(arg); closeSheet(); return; }
+  else if (act === 'sound') { S.sound = !S.sound; snd('tap'); }
+  else if (act === 'askReset') sheet.reset = true;
+  else if (act === 'reset') { newGame(); return; }
+  else if (act === 'close') { closeSheet(); return; }
+  save(); renderSheet(); updateHud();
+});
+$('btnApps').addEventListener('click', () => { save(); location.href = '../'; });
+$('btnSettings').addEventListener('click', () => { snd('tap'); openSheet({ kind: 'settings' }); });
+$('goal').addEventListener('click', claimGoal);
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  snd('tap'); const o = t.dataset.open;
+  if (o === 'build') openBuild(); else openSheet({ kind: o });
+}));
+document.querySelectorAll('#speed button').forEach(b => b.addEventListener('click', () => {
+  if (S.over) return;
+  if (mode === 'place') { toast('أكمل البناء أو ألغه أولاً'); return; }
+  S.speed = +b.dataset.s; snd('tap'); updateHud();
+}));
+
+// ======================= HUD =======================
+let goalHtml = '';
+function updateHud() {
+  $('vCash').textContent = fmt(S.cash);
+  $('vDelta').textContent = S.hist.length ? `${S.lastProfit >= 0 ? '+' : ''}${fmt(S.lastProfit)}/يوم` : '';
+  $('vDelta').className = S.lastProfit >= 0 ? 'pos' : 'neg';
+  $('pCash').classList.toggle('bad', S.cash < 0);
+  $('vRep').textContent = S.rep.toFixed(1);
+  $('vDay').textContent = `يوم ${S.day}`;
+  $('dayRing').setAttribute('stroke-dashoffset', (56.5 * (1 - clamp(S.t / DAY, 0, 1))).toFixed(1));
+  const hr = 8 + 10 * clamp(S.t / DAY, 0, 1);
+  $('pClock').innerHTML = (hr >= 17 ? ico('moon') : ico('sun')) + `<bdi>${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor((hr % 1) * 60)).padStart(2, '0')}</bdi>`;
+  document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', +b.dataset.s === S.speed));
+  const sh = shortage();
+  $('pWarn').hidden = !sh && !S.negDays;
+  if (sh) $('pWarn').innerHTML = ico('alert') + `<bdi>مواصلات ${S.emps.length}/${capacity()}</bdi>`;
+  else if (S.negDays) $('pWarn').innerHTML = ico('alert') + `<bdi>إفلاس ${S.negDays}/3</bdi>`;
+  const canTake = S.offers.length && S.contracts.length < slots();
+  $('dCon').hidden = !canTake; $('dCon').textContent = S.offers.length;
+  $('dTeam').hidden = !sh; $('dTeam').textContent = '!';
+  const g = GOALS[S.goal], ge = $('goal');
+  ge.hidden = !g || mode === 'place';
+  if (g) {
+    const done = g.ok();
+    const html = `<span class="gi">${done ? ico('check') : ico('flag')}</span><span class="gt">${done ? 'هدف محقق! اضغط للاستلام' : g.t}</span>${g.rw ? `<span class="gr">${ico('cash')}${fmt(g.rw)}</span>` : ''}`;
+    if (html !== goalHtml) { goalHtml = html; ge.innerHTML = html; ge.classList.toggle('done', done); }
+  }
+}
+
+// ======================= three.js scene =======================
+const glc = $('gl'), fxc = $('fx'), fx = fxc.getContext('2d');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true, powerPreference: 'high-performance' }); }
+catch (e) { $('boot').textContent = 'هذا المتصفح لا يدعم الرسوم ثلاثية الأبعاد.'; return; }
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0xc3c7d2);
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-10, 10, 10, -10, 1, 500);
+const CAMDIR = new THREE.Vector3(1, 1.15, 1).normalize();
+const SIN_E = CAMDIR.y;
+const view = { tx: 4.5, tz: 8, ppu: 32, to: null };
+let W = 0, H = 0, DPR = 1, T = 0;
+
+const hemi = new THREE.HemisphereLight(0xe6efff, 0x9a9484, .52);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff0d8, 1.32);
+sun.position.set(-12, 34, 24); sun.target.position.set(8, 0, 9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 30, bottom: -30, near: 1, far: 110 });
+sun.shadow.camera.updateProjectionMatrix();
+sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
+scene.add(sun, sun.target);
+
+const _c = {};
+const K = hx => (_c[hx] || (_c[hx] = new THREE.Color(hx).convertSRGBToLinear()));
+const KS = (hx, k) => K(hx).clone().multiplyScalar(k);
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _v = new THREE.Vector3(), _n3 = new THREE.Matrix3();
+const flatGeo = g => { g = g.index ? g.toNonIndexed() : g; g.computeVertexNormals(); return g; };
+const BOX = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+const ICO0 = flatGeo(new THREE.IcosahedronGeometry(1, 0)), ICO1 = flatGeo(new THREE.IcosahedronGeometry(1, 1));
+const cylCache = {};
+const cylGeo = (seg, ratio) => cylCache[seg + '_' + ratio] || (cylCache[seg + '_' + ratio] = new THREE.CylinderGeometry(ratio, 1, 1, seg).toNonIndexed());
+class Geo {
+  constructor() { this.p = []; this.n = []; this.c = []; }
+  add(g, c) {
+    const P = g.attributes.position.array, N = g.attributes.normal.array;
+    _n3.getNormalMatrix(_m);
+    for (let i = 0; i < P.length; i += 3) {
+      _v.set(P[i], P[i + 1], P[i + 2]).applyMatrix4(_m); this.p.push(_v.x, _v.y, _v.z);
+      _v.set(N[i], N[i + 1], N[i + 2]).applyMatrix3(_n3).normalize(); this.n.push(_v.x, _v.y, _v.z);
+      this.c.push(c.r, c.g, c.b);
+    }
+    return this;
+  }
+  box(x, y, z, w, h, d, c, ry = 0, rx = 0, rz = 0) { _q.setFromEuler(_e.set(rx, ry, rz)); _m.compose(_p.set(x, y + h / 2, z), _q, _s.set(w, h, d)); return this.add(BOX, c); }
+  cyl(x, y, z, r, h, c, seg = 8, ratio = 1) { _q.identity(); _m.compose(_p.set(x, y + h / 2, z), _q, _s.set(r, h, r)); return this.add(cylGeo(seg, ratio), c); }
+  wheel(x, y, z, r, w, c) { _q.setFromEuler(_e.set(0, 0, Math.PI / 2)); _m.compose(_p.set(x, y, z), _q, _s.set(r, w, r)); return this.add(cylGeo(10, 1), c); }
+  ball(x, y, z, r, c, sy = 1, lo = false) { _q.identity(); _m.compose(_p.set(x, y, z), _q, _s.set(r, r * sy, r)); return this.add(lo ? ICO0 : ICO1, c); }
+  geometry() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    return g;
+  }
+  mesh(mat, cast = true, receive = true) { const m = new THREE.Mesh(this.geometry(), mat); m.castShadow = cast; m.receiveShadow = receive; return m; }
+  get empty() { return this.p.length === 0; }
+}
+const MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+const GLOW = new THREE.MeshBasicMaterial({ vertexColors: true });
+const WINLIT = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: new THREE.Color(0xffc56b), emissiveIntensity: 0 });
+function kill(o) { if (!o) return; if (o.parent) o.parent.remove(o); o.traverse(n => { if (n.geometry && !n.isSprite && !n.userData.keep) n.geometry.dispose(); }); }
+
+const glowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,225,160,1)'); gr.addColorStop(.35, 'rgba(255,205,120,.45)'); gr.addColorStop(1, 'rgba(255,190,90,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+const HALO = new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 });
+const POOL = new THREE.MeshBasicMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 });
+const nightGroup = new THREE.Group(); scene.add(nightGroup);
+function addLamp(g, x, z, h = 2.1, armX = .45, into = nightGroup) {
+  g.cyl(x, 0, z, .05, h, K(0x4a5063), 6); g.box(x + armX / 2, h - .05, z, Math.abs(armX), .05, .05, K(0x4a5063));
+  g.box(x + armX, h - .12, z, .22, .07, .14, K(0xfff2c8));
+  const s = new THREE.Sprite(HALO); s.position.set(x + armX, h - .1, z); s.scale.set(1.6, 1.6, 1); into.add(s);
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), POOL); p.rotation.x = -Math.PI / 2; p.position.set(x + armX, .13, z); into.add(p);
+}
+function tree(g, x, z, s = 1, kind = 0, y = 0) {
+  g.cyl(x, y, z, .09 * s, .5 * s, K(0x7a5234), 6, .7);
+  if (kind === 1) { g.cyl(x, y + .35 * s, z, .5 * s, .7 * s, K(0x2f7d46), 7, .05); g.cyl(x, y + .8 * s, z, .38 * s, .6 * s, K(0x3a9353), 7, .05); g.cyl(x, y + 1.2 * s, z, .26 * s, .5 * s, K(0x49a862), 7, .05); }
+  else { g.ball(x, y + .85 * s, z, .52 * s, K(0x3f9a4d), .95); g.ball(x + .22 * s, y + 1.15 * s, z - .1 * s, .36 * s, K(0x57b25c)); g.ball(x - .25 * s, y + 1.05 * s, z + .15 * s, .3 * s, K(0x358a45)); }
+}
+
+// ---------- static world ----------
+const ROAD = { z0: 13.6, z1: 17.6, la: 14.6, lb: 16.6 };
+function buildStatic() {
+  const g = new Geo(), lit = new Geo(), R = seeded(11);
+  const tc = document.createElement('canvas'); tc.width = tc.height = 128;
+  const tg = tc.getContext('2d'); tg.fillStyle = '#c3c7d2'; tg.fillRect(0, 0, 128, 128);
+  tg.strokeStyle = 'rgba(70,80,105,.16)'; tg.lineWidth = 2; tg.strokeRect(0, 0, 128, 128); tg.strokeRect(0, 0, 64, 64); tg.strokeRect(64, 64, 64, 64);
+  const tt = new THREE.CanvasTexture(tc); tt.wrapS = tt.wrapT = THREE.RepeatWrapping; tt.repeat.set(150, 150); tt.encoding = THREE.sRGBEncoding; tt.anisotropy = 4;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshLambertMaterial({ map: tt }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(8, 0, 9); ground.receiveShadow = true; scene.add(ground);
+
+  // perimeter of the office lot
+  g.box(7, 0, 6, 14.6, .07, 12.6, K(0x9aa0b0));
+  const ext = 0xe9ecf3, cap = 0x8d93a3, glass = 0xa9d7f5;
+  g.box(7, 0, -.15, 14.6, 1.6, .3, K(ext)); g.box(7, 1.6, -.15, 14.7, .1, .36, K(cap));
+  for (let x = 1; x < 14; x += 2) { g.box(x, .45, -.005, 1.2, .8, .02, K(glass)); g.box(x, .42, .01, 1.3, .04, .04, K(cap)); }
+  g.box(-.15, 0, 6, .3, 1.6, 12.6, K(ext)); g.box(-.15, 1.6, 6, .36, .1, 12.7, K(cap));
+  for (let z = 1; z < 12; z += 2) { g.box(-.005, .45, z, .02, .8, 1.2, K(glass)); g.box(.01, .42, z, .04, .04, 1.3, K(cap)); }
+  g.box(14.15, 0, 6, .3, .3, 12.6, K(ext)); g.box(14.15, .3, 6, .36, .05, 12.6, K(cap));
+  g.box(8.075, 0, 12.15, 11.85, .3, .3, K(ext)); g.box(8.075, .3, 12.15, 11.85, .05, .36, K(cap));
+  g.box(.075, 0, 12.15, .45, .3, .3, K(ext));
+  for (const x of [.95, 2.05]) g.box(x, 0, 12.15, .1, 1.5, .34, K(0x3b4052));
+  g.box(1.5, 1.4, 12.15, 1.2, .14, .4, K(0x2f6bff));
+  g.box(1.5, 0, 12.6, 1.2, .1, .6, K(0x3b4052));
+  // sidewalk, road, far side
+  g.box(8, 0, 12.95, 140, .09, 1.3, K(0xd6d9e2));
+  g.box(8, 0, 13.55, 140, .11, .1, K(0xf1f2f6));
+  g.box(8, 0, (ROAD.z0 + ROAD.z1) / 2, 140, .03, ROAD.z1 - ROAD.z0, K(0x444a5a));
+  for (let x = -60; x < 80; x += 2.4) if (x < 1.4 || x > 3.8) g.box(x, .03, 15.6, 1.2, .006, .12, K(0xf2f2f2));
+  for (let k = 0; k < 8; k++) g.box(2.6, .03, 13.95 + k * .47, 1.3, .008, .26, K(0xf4f4f4));
+  g.box(8, 0, 17.65, 140, .11, .1, K(0xf1f2f6));
+  g.box(8, 0, 18.6, 140, .09, 1.9, K(0xd6d9e2));
+  for (const x of [-6, 5, 12.5, 22]) addLamp(g, x, 13.3, 2.2, .45);
+  for (const x of [-2, 8.5, 16, 26]) addLamp(g, x, 19.25, 2.2, .45);
+  for (const x of [-8, -4, 10.5, 14, 18, 24]) { g.box(x, .09, 19.1, .5, .08, .5, K(0x8c7a66)); tree(g, x, 19.1, .85, 0, .12); }
+  // south park
+  g.box(8, 0, 26, 80, .07, 12, K(0x7cbd6a));
+  for (let i = 0; i < 40; i++) tree(g, -18 + R() * 50, 20.8 + R() * 10, .8 + R() * .5, R() > .5 ? 1 : 0, .07);
+  g.cyl(6, .07, 25, 2.6, .03, K(0x5aa6e8), 14);
+  // background towers
+  const pal = [0xd8c7b2, 0xb9c6d8, 0xe0b9a5, 0xc5d3c0, 0xd9d2bf, 0xb7b2cf, 0xcfa98f, 0xa9bccb];
+  const tower = (cx, cz, w, d, h) => {
+    const col = pal[Math.floor(R() * pal.length)];
+    g.box(cx, 0, cz, w, h, d, K(col)); g.box(cx, 0, cz, w + .12, .5, d + .12, KS(col, .7));
+    g.box(cx, h, cz, w + .1, .14, d + .1, KS(col, .85)); g.box(cx, h + .14, cz, w - .5, .06, d - .5, K(0x8a8f9c));
+    g.box(cx - w * .2, h + .14, cz - d * .15, 1, .45, .8, K(0xb5bac6));
+    const floors = Math.floor((h - .8) / .95);
+    for (let f = 0; f < floors; f++) {
+      const y = .8 + f * .95, nx = Math.max(2, Math.round(w / 1.15)), nz = Math.max(2, Math.round(d / 1.15));
+      for (let k = 0; k < nx; k++) (R() > .45 ? lit : g).box(cx - w / 2 + (k + .5) * w / nx, y, cz + d / 2, w / nx * .62, .5, .05, K(0x51668a));
+      for (let k = 0; k < nz; k++) (R() > .45 ? lit : g).box(cx + w / 2, y, cz - d / 2 + (k + .5) * d / nz, .05, .5, d / nz * .62, K(0x465a7a));
+    }
+  };
+  [[-1, -5.5, 6, 5, 7], [6.5, -5.5, 6.5, 5, 10], [13.5, -5.5, 5.5, 5, 8], [21, -5.5, 6, 5, 12], [-14, -16, 9, 8, 14], [0, -15, 9, 8, 12], [12, -16, 9, 8, 16], [26, -16, 9, 8, 11]].forEach(b => tower(...b));
+  [[-5.5, 1, 5, 6, 9], [-5.5, 8.5, 5, 7, 7], [-16, 0, 8, 8, 13], [-16, 11, 8, 9, 10]].forEach(b => tower(...b));
+  [[27, 2, 6, 6, 9], [27, 9.5, 6, 6, 7]].forEach(b => tower(...b));
+  // parking pads east
+  g.box(18.2, 0, 6, 6.4, .05, 12.4, K(0xb3b8c4));
+  g.box(19.9, 0, 12.6, 2.2, .06, 1.2, K(0x8d93a3));
+  scene.add(g.mesh(MAT));
+  scene.add(lit.mesh(WINLIT, false, false));
+}
+
+// ---------- lot floor (depends on plots) ----------
+let lotObj = null, lotKey = '', gridObj = null;
+function syncLot() {
+  const key = JSON.stringify(S.plots);
+  if (key === lotKey) return;
+  lotKey = key; kill(lotObj); kill(gridObj);
+  const g = new Geo();
+  for (let z = 0; z < LOT_D; z++) for (let x = 0; x < LOT_W; x++) {
+    const open = cellUnlocked(x, z);
+    g.box(x + .5, .07, z + .5, 1, .03, 1, open ? KS(0xe8e3d6, (x + z) % 2 ? 1 : .95) : KS(0x7d8396, (x + z) % 2 ? 1 : .93));
+  }
+  g.box(1.5, .1, 11.5, .9, .006, .9, K(0x3b4052));
+  for (const p of PLOTS) {
+    if (S.plots[p.id]) continue;
+    const segs = [[p.x0, p.z0, p.x1, p.z0], [p.x0, p.z1, p.x1, p.z1], [p.x0, p.z0, p.x0, p.z1], [p.x1, p.z0, p.x1, p.z1]];
+    for (const [a, b, c, d] of segs) {
+      const len = Math.hypot(c - a, d - b), n = Math.round(len / .5);
+      for (let j = 0; j < n; j++) { const t = (j + .5) / n; g.box(lerp(a, c, t), .1, lerp(b, d, t), c !== a ? len / n : .06, .03, d !== b ? len / n : .06, K(j % 2 ? 0x2c2f3a : 0xf2b21d)); }
+    }
+    for (const [x, z] of [[p.x0 + .3, p.z0 + .3], [p.x1 - .3, p.z1 - .3], [p.x0 + .3, p.z1 - .3], [p.x1 - .3, p.z0 + .3]]) g.box(x, .1, z, .1, .5, .1, K(0xf2b21d));
+    const cx = (p.x0 + p.x1) / 2, cz = (p.z0 + p.z1) / 2;
+    g.box(cx - 1, .1, cz, .7, .45, .7, K(0xc1935a)); g.box(cx + .8, .1, cz + .5, .5, .3, .5, K(0xb4864f));
+    g.cyl(cx + 1.4, .1, cz - .6, .16, .38, K(0xf26b1d), 8, .15);
+  }
+  lotObj = g.mesh(MAT, false, true); scene.add(lotObj);
+  const pts = [];
+  for (let z = 0; z < LOT_D; z++) for (let x = 0; x < LOT_W; x++) {
+    if (!cellUnlocked(x, z)) continue;
+    pts.push(x, .1, z, x + 1, .1, z, x, .1, z, x, .1, z + 1);
+    if (x === LOT_W - 1 || !cellUnlocked(x + 1, z)) pts.push(x + 1, .1, z, x + 1, .1, z + 1);
+    if (z === LOT_D - 1 || !cellUnlocked(x, z + 1)) pts.push(x, .1, z + 1, x + 1, .1, z + 1);
+  }
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  gridObj = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2f6bff, transparent: true, opacity: .45 }));
+  gridObj.visible = mode === 'place'; scene.add(gridObj);
+}
+
+// ---------- rooms ----------
+const FLOOR = .12, WH = 1.15, WT = .12;
+const roomObjs = new Map(), roomPop = new Map();
+function buildRoomGeo(room, g, glow) {
+  const T0 = TYPES[room.type], w = T0.w, d = T0.d, f = roomFrame(room);
+  const tall = (nu, nv) => { const nx = nu * f.c + nv * f.s, nz = -nu * f.s + nv * f.c; return nz < -.5 || nx < -.5; };
+  for (let u = 0; u < w; u++) for (let v = 0; v < d; v++) g.box(u + .5, .085, v + .5, 1, .04, 1, KS(T0.floor, (u + v) % 2 ? 1 : .93));
+  const capC = 0xf5f6fa, wc = T0.wall, du = w / 2;
+  const wallU = (u0, u1, v, isTall) => {
+    const L = u1 - u0, cu = (u0 + u1) / 2;
+    if (L <= .01) return;
+    if (isTall) { g.box(cu, FLOOR - .04, v, L, WH, WT, K(wc)); g.box(cu, FLOOR - .04, v, L, .13, WT + .04, KS(wc, .72)); g.box(cu, FLOOR - .04 + WH, v, L, .05, WT + .05, K(capC)); g.box(cu, FLOOR + .62, v, L, .07, WT + .01, K(T0.acc)); }
+    else { g.box(cu, FLOOR - .04, v, L, .28, WT, KS(wc, .86)); g.box(cu, FLOOR + .24, v, L + .02, .04, WT + .03, K(capC)); }
+  };
+  const wallV = (v0, v1, u, isTall) => {
+    const L = v1 - v0, cv = (v0 + v1) / 2;
+    if (isTall) { g.box(u, FLOOR - .04, cv, WT, WH, L, K(wc)); g.box(u, FLOOR - .04, cv, WT + .04, .13, L, KS(wc, .72)); g.box(u, FLOOR - .04 + WH, cv, WT + .05, .05, L, K(capC)); g.box(u, FLOOR + .62, cv, WT + .01, .07, L, K(T0.acc)); }
+    else { g.box(u, FLOOR - .04, cv, WT, .28, L, KS(wc, .86)); g.box(u, FLOOR + .24, cv, WT + .03, .04, L + .02, K(capC)); }
+  };
+  const tb = tall(0, -1), tf = tall(0, 1), tl = tall(-1, 0), tr = tall(1, 0);
+  wallU(0, w, WT / 2, tb);
+  wallU(0, du - .42, d - WT / 2, tf); wallU(du + .42, w, d - WT / 2, tf);
+  if (tf) { g.box(du, FLOOR + .9, d - WT / 2, .84, WH - .94, WT, K(wc)); g.box(du, FLOOR - .04 + WH, d - WT / 2, .84, .05, WT + .05, K(capC)); }
+  g.box(du - .45, FLOOR - .04, d - WT / 2, .07, tf ? .96 : .34, WT + .05, K(0x6b4a34)); g.box(du + .45, FLOOR - .04, d - WT / 2, .07, tf ? .96 : .34, WT + .05, K(0x6b4a34));
+  wallV(0, d, WT / 2, tl); wallV(0, d, w - WT / 2, tr);
+  const cols = [0xf5c84b, 0x5fb6e8, 0xef6f7d, 0x8fd6a1];
+  const posterU = (u, v, s) => { g.box(u, FLOOR + .74, v, .5, .34, .02, K(0x3b4052)); g.box(u, FLOOR + .76, v + s * .012, .44, .28, .02, K(cols[(room.id + Math.round(u * 3)) % 4])); };
+  const posterV = (u, v, s) => { g.box(u, FLOOR + .74, v, .02, .34, .5, K(0x3b4052)); g.box(u + s * .012, FLOOR + .76, v, .02, .28, .44, K(cols[(room.id + Math.round(v * 3)) % 4])); };
+  if (tb) posterU(w - .8, WT + .02, 1);
+  if (tl) posterV(WT + .02, d / 2 - .2, 1);
+  if (tr) posterV(w - WT - .02, d / 2 - .2, -1);
+  const plant = (u, v) => { g.cyl(u, FLOOR, v, .15, .24, K(0xdad3c6), 8, .8); g.ball(u, FLOOR + .5, v, .24, K(0x3f9a4d)); g.ball(u + .1, FLOOR + .68, v - .05, .16, K(0x57b25c)); };
+
+  if (T0.kind === 'prod') {
+    const nE = empsIn(room.id).map(e => e.desk);
+    DESKS.forEach(([du0, dv], k) => {
+      const dc = K(0xf3f4f8), dcd = KS(0xf3f4f8, .78);
+      g.box(du0, FLOOR + .36, dv, .88, .05, .5, dc);
+      g.box(du0 - .4, FLOOR, dv, .05, .36, .46, dcd); g.box(du0 + .4, FLOOR, dv, .05, .36, .46, dcd); g.box(du0, FLOOR + .12, dv - .2, .76, .22, .03, dcd);
+      const mz = dv - .14;
+      g.box(du0, FLOOR + .41, mz, .1, .02, .1, K(0x2a2e3a)); g.box(du0, FLOOR + .43, mz, .04, .1, .04, K(0x2a2e3a)); g.box(du0, FLOOR + .5, mz, .36, .25, .035, K(0x1d2029));
+      if (nE.includes(k)) glow.box(du0, FLOOR + .525, mz + .022, .31, .2, .006, K([0x5fd0ff, 0x8ee6ff, 0x6fe3b0, 0xbfe9ff][(k + room.id) % 4]));
+      g.box(du0, FLOOR + .41, dv + .09, .28, .015, .1, K(0x596078));
+      const px = du0 - .32, py = FLOOR + .41;
+      if (room.type === 'sales') g.ball(px, py + .04, dv, .05, K(0xe2b93b));
+      else if (room.type === 'design') { g.box(px, py, dv, .1, .02, .14, K(0xff5d8f)); g.box(px + .03, py + .02, dv, .1, .02, .14, K(0x5fb6e8), .3); }
+      else if (room.type === 'market') g.cyl(px, py, dv, .06, .12, K(0xd9415b), 6, .3);
+      else g.box(px, py, dv, .1, .03, .16, K(0x3b4052));
+      const cz = dv + .6;
+      g.cyl(du0, FLOOR, cz, .17, .03, K(0x2a2e3a), 8); g.cyl(du0, FLOOR, cz, .03, .28, K(0x2a2e3a), 6);
+      g.box(du0, FLOOR + .27, cz, .32, .05, .32, K(0x394055)); g.box(du0, FLOOR + .3, cz + .16, .32, .34, .05, K(0x394055));
+    });
+    plant(w - .32, .35); plant(.32, .35);
+  } else if (room.type === 'break') {
+    g.box(1.05, FLOOR, .42, 1.6, .22, .55, K(0xe9832f)); g.box(1.05, FLOOR + .22, .2, 1.6, .32, .14, K(0xd1702a)); g.box(.3, FLOOR + .22, .42, .14, .14, .55, K(0xd1702a)); g.box(1.8, FLOOR + .22, .42, .14, .14, .55, K(0xd1702a));
+    g.box(.28, FLOOR, 1.7, .42, .48, 1.2, K(0x8a6044)); g.box(.28, FLOOR + .48, 1.7, .46, .04, 1.24, K(0xf2e6d0)); g.box(.28, FLOOR + .52, 1.4, .26, .3, .24, K(0x3b4052)); g.cyl(.28, FLOOR + .52, 1.9, .06, .1, K(0xffffff), 6);
+    g.cyl(1.55, FLOOR, 1.75, .05, .4, K(0x596078), 6); g.cyl(1.55, FLOOR + .4, 1.75, .34, .04, K(0xfaf6ee), 12);
+    for (const su of [1.05, 2.05]) { g.cyl(su, FLOOR, 1.75, .03, .26, K(0x596078), 6); g.cyl(su, FLOOR + .26, 1.75, .14, .04, K(0xe9832f), 8); }
+    g.box(2.6, FLOOR, .45, .5, 1.0, .45, K(0xd9463c)); glow.box(2.6, FLOOR + .45, .68, .36, .44, .006, K(0xbfe9ff));
+    g.box(1.1, FLOOR + .002, .95, 1.4, .006, .7, K(0x6fa0d8));
+    plant(2.65, 2.55);
+  } else if (room.type === 'meet') {
+    g.box(1.5, FLOOR + .34, 1.55, 1.7, .06, .8, K(0x8a6044)); g.box(1.0, FLOOR, 1.55, .08, .34, .5, K(0x5c4433)); g.box(2.0, FLOOR, 1.55, .08, .34, .5, K(0x5c4433));
+    for (const [cu, cv] of [[.9, .95], [1.5, .95], [2.1, .95], [.9, 2.15], [1.5, 2.15], [2.1, 2.15]]) { g.box(cu, FLOOR + .22, cv, .3, .05, .3, K(0x2f6bff)); g.box(cu, FLOOR + .25, cv + (cv < 1.5 ? -.14 : .14), .3, .3, .05, K(0x2f6bff)); g.cyl(cu, FLOOR, cv, .03, .22, K(0x2a2e3a), 6); }
+    g.box(1.5, FLOOR + .45, WT + .03, 1.3, .65, .04, K(0x1d2029)); glow.box(1.5, FLOOR + .5, WT + .06, 1.2, .55, .006, K(0x8ec5ff));
+    plant(2.65, 2.55); plant(.35, 2.55);
+  } else if (room.type === 'server') {
+    for (const rv of [.62, 1.75]) for (const ru of [.65, 1.5, 2.35]) {
+      g.box(ru, FLOOR, rv, .72, 1.0, .5, K(0x23262f)); g.box(ru, FLOOR + 1.0, rv, .74, .04, .52, K(0x3b4052));
+      for (let k = 0; k < 5; k++) glow.box(ru - .2 + (k % 2) * .12, FLOOR + .18 + k * .16, rv + .255, .06, .03, .004, K(k % 3 ? 0x3fe07a : 0x5fb6e8));
+    }
+    g.box(2.7, FLOOR + .6, 2.6, .5, .4, .25, K(0xe9edf5));
+  }
+}
+function syncRooms() {
+  const live = new Set();
+  for (const room of S.rooms) {
+    live.add(room.id);
+    const n = TYPES[room.type].kind === 'prod' ? empsIn(room.id).map(e => e.desk).sort().join(',') : '';
+    const key = `${room.type}|${room.x}|${room.z}|${room.r}|${n}`;
+    let o = roomObjs.get(room.id);
+    if (!o || o.key !== key) {
+      if (o) kill(o.group);
+      const g = new Geo(), glow = new Geo();
+      buildRoomGeo(room, g, glow);
+      const grp = new THREE.Group(); grp.add(g.mesh(MAT));
+      if (!glow.empty) grp.add(glow.mesh(GLOW, false, false));
+      const f = roomFrame(room);
+      grp.rotation.y = f.th; grp.position.set(f.ox, 0, f.oz);
+      scene.add(grp);
+      o = { group: grp, key }; roomObjs.set(room.id, o);
+    }
+    const t0 = roomPop.get(room.id);
+    if (t0 !== undefined) {
+      const a = (T - t0) / .6;
+      if (a >= 1) { roomPop.delete(room.id); o.group.scale.set(1, 1, 1); }
+      else { const k = a - 1, e = 1 + 2.7 * k * k * k + 1.7 * k * k; o.group.scale.set(1, Math.max(.02, e), 1); }
+    }
+  }
+  for (const [id, o] of roomObjs) if (!live.has(id)) { kill(o.group); roomObjs.delete(id); }
+}
+
+// ---------- ghost for placement ----------
+let ghostObj = null;
+const GHOST_OK = new THREE.MeshBasicMaterial({ color: 0x3fe07a, transparent: true, opacity: .45, depthWrite: false });
+const GHOST_NO = new THREE.MeshBasicMaterial({ color: 0xff4b55, transparent: true, opacity: .45, depthWrite: false });
+const GHOST_EDGE = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .9, depthWrite: false });
+const DOOR_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, depthWrite: false, transparent: true, opacity: .95, side: THREE.DoubleSide });
+function syncGhost() {
+  if (gridObj) gridObj.visible = mode === 'place';
+  if (!ghostDirty) { if (ghostObj) ghostObj.children[0].material.opacity = .35 + .15 * Math.sin(T * 5); return; }
+  ghostDirty = false; kill(ghostObj); ghostObj = null;
+  if (mode !== 'place' || !place) return;
+  const T0 = TYPES[place.type], w = T0.w, d = T0.d, ok = !validate(place, place.moving);
+  const grp = new THREE.Group();
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(w, .5, d), ok ? GHOST_OK : GHOST_NO); plate.position.set(w / 2, .3, d / 2); plate.renderOrder = 3; grp.add(plate);
+  const edge = (x, z, ew, ed) => { const m = new THREE.Mesh(new THREE.BoxGeometry(ew, .06, ed), GHOST_EDGE); m.position.set(x, .58, z); m.renderOrder = 4; grp.add(m); };
+  edge(w / 2, 0, w, .06); edge(w / 2, d, w, .06); edge(0, d / 2, .06, d); edge(w, d / 2, .06, d);
+  const shape = new THREE.Shape(); shape.moveTo(-.35, 0); shape.lineTo(.35, 0); shape.lineTo(0, -.45); shape.closePath();
+  const arrow = new THREE.Mesh(new THREE.ShapeGeometry(shape), DOOR_MAT); arrow.rotation.x = -Math.PI / 2; arrow.position.set(w / 2, .14, d + .08); arrow.renderOrder = 4; grp.add(arrow);
+  const f = roomFrame(place); grp.rotation.y = f.th; grp.position.set(f.ox, 0, f.oz);
+  scene.add(grp); ghostObj = grp;
+  updatePlacebar();
+}
+
+// ---------- facilities ----------
+let facObj = null, facKey = '', carSlots = [];
+function syncFacilities() {
+  const key = JSON.stringify(S.fac);
+  if (key === facKey) return;
+  facKey = key; kill(facObj); facObj = new THREE.Group(); scene.add(facObj);
+  const g = new Geo(), glow = new Geo();
+  carSlots = [];
+  const lots = [[8, 12], [4, 8], [0, 4]];
+  for (let i = 0; i < 3; i++) {
+    const [z0, z1] = lots[i], zc = (z0 + z1) / 2;
+    if (i < S.fac.parking) {
+      g.box(18.2, .05, zc, 6, .03, 3.8, K(0x5b6072));
+      for (let j = 0; j <= 6; j++) g.box(15.2 + j, .08, zc - .9, .06, .006, 1.6, K(0xf2f2f2));
+      for (let j = 0; j < 6; j++) carSlots.push([15.7 + j, .08, zc - .9, 0]);
+      g.cyl(20.9, .05, z0 + .4, .05, 1.6, K(0x4a5063), 6); g.box(20.9, 1.45, z0 + .4, .5, .5, .08, K(0x2f6bff));
+    } else {
+      g.box(18.2, .05, zc, 5.8, .02, 3.6, K(0xa2a8b6));
+      g.cyl(20.9, .05, z0 + .4, .04, .8, K(0x4a5063), 6); g.box(20.9, .8, z0 + .4, .5, .3, .05, K(0xf2b21d));
+    }
+  }
+  if (S.fac.parking) addLamp(g, 15.4, 8.1, 2, .4, facObj);
+  if (S.fac.bus) {
+    g.box(6.0, .09, 18.95, .08, 1.2, .08, K(0x5c6378)); g.box(7.9, .09, 18.95, .08, 1.2, .08, K(0x5c6378));
+    g.box(6.95, 1.29, 18.8, 2.3, .06, .8, K(0x2f6bff)); g.box(6.95, .09, 19.15, 2.0, 1.1, .05, K(0xbcd8f2)); g.box(6.95, .32, 18.95, 1.4, .06, .3, K(0x6b7591));
+    g.cyl(8.3, .09, 18.3, .05, 1.8, K(0x4a5063), 6); g.box(8.3, 1.7, 18.3, .4, .4, .06, K(0x2f6bff));
+  }
+  if (S.fac.metro) {
+    g.box(11, .09, 18.7, 2.6, .05, 1.6, K(0xb9bdc9)); g.box(11, .1, 18.75, 1.4, .02, 1.1, K(0x23262f));
+    for (const [px, pz] of [[9.9, 18.05], [12.1, 18.05], [9.9, 19.4], [12.1, 19.4]]) g.cyl(px, .09, pz, .05, 1.25, K(0x5c6378), 6);
+    g.box(11, 1.33, 18.7, 2.5, .07, 1.6, K(0x7fb4e8));
+    g.box(12.7, .09, 18.2, .14, 2.1, .14, K(0x4a5063)); g.box(12.7, 1.85, 18.2, .55, .55, .12, K(0x4b3fc9));
+    glow.box(12.7, 1.95, 18.27, .34, .34, .01, K(0xffffff));
+  }
+  facObj.add(g.mesh(MAT));
+  if (!glow.empty) facObj.add(glow.mesh(GLOW, false, false));
+}
+
+// ---------- people ----------
+const MAXP = 120;
+const PMAT = new THREE.MeshLambertMaterial({ color: 0xffffff });
+const mkInst = (geo, n) => { const m = new THREE.InstancedMesh(geo, PMAT, n); m.frustumCulled = false; m.castShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); return m; };
+const P_TORSO = mkInst(new THREE.BoxGeometry(.27, .3, .17), MAXP);
+const P_HEAD = mkInst(new THREE.IcosahedronGeometry(.15, 1), MAXP);
+const P_HAIR = mkInst(new THREE.SphereGeometry(.162, 8, 6, 0, Math.PI * 2, 0, Math.PI * .5), MAXP);
+const P_LEG = mkInst(new THREE.BoxGeometry(.105, .3, .115).translate(0, -.15, 0), MAXP * 2);
+const P_ARM = mkInst(new THREE.BoxGeometry(.08, .27, .09).translate(0, -.135, 0), MAXP * 2);
+const SKINS = [0xf5cba7, 0xe0ac82, 0xc68c5e, 0x8d5a3b], HAIRS = [0x2b1d14, 0x4a2f1c, 0x15151a, 0x8a5a2b, 0xc9a25a], PANTS = [0x2c3350, 0x3b3f4d, 0x4a3a2c, 0x23262f];
+let pseed = 1;
+function mkPerson(x, z, shirt, o = {}) {
+  const s = pseed++;
+  return Object.assign({ x, y: .1, z, a: 0, pose: 2, ph: s * 1.7, seed: s * 2.3, shirt: K(shirt), skin: K(SKINS[s % 4]), hair: K(HAIRS[(s * 7) % 5]), pants: K(PANTS[(s * 3) % 4]),
+    path: null, pi: 0, speed: 1.6, done: null, fn: null, sy: .1, seg: 1 }, o);
+}
+function walk(p, path, done) { p.path = path; p.pi = 0; p.done = done || null; p.pose = 0; p.sy = p.y; p.seg = Math.max(.001, Math.hypot(path[0][0] - p.x, path[0][1] - p.z)); }
+function stepPerson(p, dt) {
+  if (p.fn) p.fn(p, dt);
+  if (!p.path) return;
+  let left = p.speed * dt;
+  while (left > 0 && p.path) {
+    const [tx, tz, ty = p.y] = p.path[p.pi], dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+    if (d > 1e-4) p.a = Math.atan2(dx, dz);
+    if (d <= left) {
+      p.x = tx; p.z = tz; p.y = ty; left -= d; p.pi++;
+      if (p.pi >= p.path.length) { p.path = null; p.pose = 2; if (p.done) { const f = p.done; p.done = null; f(); } }
+      else { const n = p.path[p.pi]; p.sy = p.y; p.seg = Math.max(.001, Math.hypot(n[0] - p.x, n[1] - p.z)); }
+    } else { p.x += dx / d * left; p.z += dz / d * left; const rem = d - left; p.y = ty + (p.sy - ty) * (rem / p.seg); left = 0; }
+  }
+  p.ph += dt * 11;
+}
+const walkers = new Map();
+let ambient = [], people = [], peopleDirty = true;
+function sitAt(p, e) { const r = roomById(e.room); if (!r) return; const s = seatOf(r, e.desk); p.x = s.x; p.z = s.z; p.a = s.a; p.pose = 1; p.y = FLOOR; p.path = null; }
+function routeFor(e) {
+  const r = roomById(e.room); if (!r) return null;
+  const occ = buildOcc(), di = doorInfo(r), { P, D } = bfs(occ, ENTR);
+  let c = di.cell;
+  if (!D[c[1]] || D[c[1]][c[0]] < 0) return null;
+  const cells = [];
+  while (c) { cells.unshift(c); c = P[c[1]][c[0]]; }
+  const pts = [[rnd(5, 9), 19.0, .1], [2.6, 19.0, .1], [2.6, 13.2, .1], [1.5, 12.7, .1]];
+  for (const [x, z] of cells) pts.push([x + .5, z + .5, .1]);
+  const T0 = TYPES[r.type], out = l2w(r, T0.w / 2, T0.d + .3), door = l2w(r, T0.w / 2, T0.d - .3), lane = l2w(r, T0.w / 2, DESKS[e.desk][1] + .55), s = seatOf(r, e.desk);
+  pts.push([out[0], out[1], .1], [door[0], door[1], FLOOR], [lane[0], lane[1], FLOOR], [s.x, s.z, FLOOR]);
+  return pts;
+}
+function spawnWalker(e) {
+  const r = roomById(e.room); if (!r) return;
+  const p = mkPerson(7, 19, TYPES[r.type].shirt);
+  const path = routeFor(e);
+  walkers.set(e.id, p); peopleDirty = true;
+  if (!path) { sitAt(p, e); return; }
+  p.x = path[0][0]; p.z = path[0][1];
+  walk(p, path.slice(1), () => sitAt(p, e));
+}
+function removeWalker(id) { walkers.delete(id); peopleDirty = true; }
+function reseatRoom(roomId) { for (const e of empsIn(roomId)) { const p = walkers.get(e.id); if (p) sitAt(p, e); } }
+const CROWD_SH = [0x4db366, 0xf2f2f7, 0x4066bf, 0xe6803a, 0xd9415b];
+function syncPeople() {
+  for (const e of S.emps) if (!walkers.has(e.id)) { const r = roomById(e.room); if (!r) continue; const p = mkPerson(0, 0, TYPES[r.type].shirt); sitAt(p, e); walkers.set(e.id, p); peopleDirty = true; }
+  for (const id of [...walkers.keys()]) if (!S.emps.some(e => e.id === id)) { walkers.delete(id); peopleDirty = true; }
+  const need = Math.min(10, shortage());
+  if (ambient.filter(p => p.crowd).length !== need) {
+    ambient = ambient.filter(p => !p.crowd);
+    for (let k = 0; k < need; k++) { const p = mkPerson(2.4 + (k % 5) * .4, 18.3 + Math.floor(k / 5) * .45, CROWD_SH[k % 5], { crowd: true }); p.a = Math.PI; ambient.push(p); }
+    peopleDirty = true;
+  }
+  if (peopleDirty) { people = [...walkers.values(), ...ambient].slice(0, MAXP); peopleDirty = false; }
+}
+function buildAmbient() {
+  const SH = [0x4db366, 0xf2f2f7, 0x4066bf, 0xe6803a, 0xd9415b, 0x8a5fd0, 0x2aa7a0];
+  for (let k = 0; k < 8; k++) {
+    const far = k % 2 === 1, dir = k % 4 < 2 ? 1 : -1;
+    const p = mkPerson(-20 + k * 6.5, far ? 18.75 + (k % 3) * .12 : 12.85, SH[k % SH.length], { speed: 1.1 + (k % 3) * .25, dir });
+    p.pose = 0; p.a = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    p.fn = (q, dt) => { q.x += q.dir * q.speed * dt; q.ph += dt * 10; if (q.x > 34) q.x = -24; if (q.x < -24) q.x = 34; };
+    ambient.push(p);
+  }
+}
+const _b = new THREE.Matrix4(), _l = new THREE.Matrix4(), _o = new THREE.Matrix4();
+function setPart(mesh, idx, x, y, z, rx, c) { _l.makeRotationX(rx); _l.setPosition(x, y, z); _o.multiplyMatrices(_b, _l); mesh.setMatrixAt(idx, _o); mesh.setColorAt(idx, c); }
+function updatePeople(dt) {
+  let n = 0;
+  const typing = S.speed > 0 && mode !== 'place';
+  for (const p of people) {
+    stepPerson(p, dt);
+    const i = n++;
+    _b.makeRotationY(p.a); _b.setPosition(p.x, p.y, p.z);
+    let hip = .3, la = 0, lb = 0, aa = 0, ab = 0;
+    if (p.pose === 1) { la = lb = -Math.PI / 2; aa = -1.15 + (typing ? Math.sin(T * 9 + p.seed) * .08 : 0); ab = -1.15 + (typing ? Math.sin(T * 9 + p.seed + 2) * .08 : 0); }
+    else if (p.pose === 0) { const sw = Math.sin(p.ph) * .75; la = sw; lb = -sw; aa = -sw * .8; ab = sw * .8; hip += Math.abs(Math.sin(p.ph)) * .02; }
+    else hip += Math.sin(T * 2 + p.seed) * .006;
+    setPart(P_TORSO, i, 0, hip + .15, 0, 0, p.shirt);
+    setPart(P_HEAD, i, 0, hip + .45, 0, 0, p.skin);
+    setPart(P_HAIR, i, 0, hip + .46, -.012, -.12, p.hair);
+    setPart(P_LEG, i * 2, -.07, hip, 0, la, p.pants); setPart(P_LEG, i * 2 + 1, .07, hip, 0, lb, p.pants);
+    setPart(P_ARM, i * 2, -.175, hip + .29, 0, aa, p.shirt); setPart(P_ARM, i * 2 + 1, .175, hip + .29, 0, ab, p.shirt);
+  }
+  for (const m of [P_TORSO, P_HEAD, P_HAIR]) { m.count = n; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  for (const m of [P_LEG, P_ARM]) { m.count = n * 2; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+}
+
+// ---------- vehicles ----------
+const MAXC = 64;
+const carPaintGeo = (() => { const g = new Geo(), w = K(0xffffff); g.box(0, .13, 0, .8, .25, 1.56, w); g.box(0, .38, -.06, .68, .2, .78, w); g.box(0, .58, -.06, .72, .035, .84, w); return g.geometry(); })();
+const carTrimGeo = (() => {
+  const g = new Geo(), gl = K(0x22344d), dk = K(0x1d1f27);
+  g.box(0, .385, -.06, .73, .175, .68, gl); g.box(0, .385, -.06, .62, .175, .86, gl);
+  for (const x of [-.37, .37]) for (const z of [-.5, .5]) { g.wheel(x, .15, z, .15, .13, dk); g.wheel(x + Math.sign(x) * .05, .15, z, .07, .05, K(0xb9bdc9)); }
+  g.box(0, .11, .79, .76, .1, .06, K(0x8d93a3)); g.box(0, .11, -.79, .76, .1, .06, K(0x8d93a3));
+  for (const x of [-.26, .26]) { g.box(x, .25, .78, .17, .07, .03, K(0xfff2c0)); g.box(x, .25, -.78, .17, .07, .03, K(0xe0393f)); }
+  return g.geometry();
+})();
+const CARPAINT = new THREE.InstancedMesh(carPaintGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), MAXC);
+const CARTRIM = new THREE.InstancedMesh(carTrimGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), MAXC);
+for (const m of [CARPAINT, CARTRIM]) { m.frustumCulled = false; m.castShadow = true; m.receiveShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); }
+const busMesh = (() => {
+  const g = new Geo();
+  g.box(0, .2, 0, 1.0, .95, 3.4, K(0xf2f4f8)); g.box(0, .2, 0, 1.02, .3, 3.42, K(0x2f6bff));
+  g.box(0, .62, 0, 1.03, .38, 3.1, K(0x22344d)); g.box(0, 1.15, 0, .9, .06, 3.2, K(0xd9dde6));
+  for (const x of [-.45, .45]) for (const z of [-1.1, 1.1]) g.wheel(x, .2, z, .2, .16, K(0x1d1f27));
+  g.box(0, .45, 1.71, .8, .4, .02, K(0x22344d)); g.box(0, .95, 1.71, .6, .12, .02, K(0xffb820));
+  const m = g.mesh(new THREE.MeshLambertMaterial({ vertexColors: true })); m.visible = false; scene.add(m); return m;
+})();
+const CARCOL = [0xd9453c, 0x3873d9, 0xf2cc38, 0x52b861, 0xe6e6eb, 0xf28c33, 0x2a2e3a, 0x8a5fd0, 0x19b6d2].map(K);
+const LOOP = 120;
+const lanes = [{ z: ROAD.la, dir: 1, cars: [] }, { z: ROAD.lb, dir: -1, cars: [] }];
+lanes.forEach((L, li) => { for (let k = 0; k < 6; k++) L.cars.push({ s: k * 19 + li * 6, v: 3.2, L: 1.6, col: CARCOL[(k * 2 + li * 3) % CARCOL.length] }); });
+lanes[1].cars.push({ s: 63, v: 3, L: 3.5, bus: true, dwell: 0, stopped: false });
+lanes[1].cars.sort((a, b) => a.s - b.s);
+const laneX = (L, s) => L.dir > 0 ? s - 45 : 75 - s;
+const laneS = (L, x) => L.dir > 0 ? x + 45 : 75 - x;
+let nCars = 0;
+function putCar(x, y, z, a, col) {
+  if (nCars >= MAXC) return;
+  _b.makeRotationY(a); _b.setPosition(x, y, z);
+  CARPAINT.setMatrixAt(nCars, _b); CARPAINT.setColorAt(nCars, col); CARTRIM.setMatrixAt(nCars, _b); nCars++;
+}
+function updateCars(dt) {
+  nCars = 0;
+  const crossing = people.some(p => p.path && p.x > 1.8 && p.x < 3.4 && p.z > 13.4 && p.z < 17.8);
+  for (const L of lanes) {
+    const n = L.cars.length, stops = [];
+    if (crossing) stops.push(laneS(L, L.dir > 0 ? 1.4 : 3.8));
+    for (let k = 0; k < n; k++) {
+      const c = L.cars[k];
+      if (c.bus && !S.fac.bus) { c.s += 3.2 * dt; if (c.s >= LOOP) c.s -= LOOP; continue; }
+      let j = (k + 1) % n; if (L.cars[j].bus && !S.fac.bus) j = (j + 1) % n;
+      const ahead = L.cars[j];
+      let gap = ahead.s - c.s - (ahead.L + c.L) / 2; if (gap < -c.L) gap += LOOP;
+      let target = 3.2;
+      if (gap < .6) target = 0; else if (gap < 3) target = Math.min(target, 3.2 * (gap - .6) / 2.4);
+      for (const sl of stops) { let d = sl - (c.s + c.L / 2); if (d < -1) d += LOOP; if (d >= 0 && d < 6) target = Math.min(target, 3.2 * Math.max(0, d - .2) / 5.8); }
+      if (c.bus) {
+        const stopS = laneS(L, 6.95);
+        let d = stopS - c.s; if (d < -2) d += LOOP;
+        if (!c.stopped && d >= 0 && d < 6) target = Math.min(target, Math.max(.25, 3 * d / 6));
+        if (!c.stopped && d >= -.05 && d < .1) { c.stopped = true; c.dwell = 2.5; }
+        if (c.dwell > 0) { c.dwell -= dt; target = 0; }
+        if (c.stopped && d > 10 && d < 60) c.stopped = false;
+      }
+      c.v += clamp(target - c.v, -9 * dt, 4 * dt); c.v = Math.max(0, c.v);
+      c.s += c.v * dt; if (c.s >= LOOP) c.s -= LOOP;
+    }
+    L.cars.sort((a, b) => a.s - b.s);
+    for (const c of L.cars) {
+      const x = laneX(L, c.s);
+      if (c.bus) { busMesh.visible = !!S.fac.bus; busMesh.position.set(x, .03, L.z); busMesh.rotation.y = L.dir > 0 ? Math.PI / 2 : -Math.PI / 2; continue; }
+      if (x > -40 && x < 50) putCar(x, .03, L.z, L.dir > 0 ? Math.PI / 2 : -Math.PI / 2, c.col);
+    }
+  }
+  const parked = Math.min(S.emps.length, carSlots.length);
+  for (let k = 0; k < parked; k++) { const s = carSlots[k]; putCar(s[0], s[1], s[2], s[3], CARCOL[(k * 5 + 2) % CARCOL.length]); }
+  CARPAINT.count = CARTRIM.count = nCars;
+  CARPAINT.instanceMatrix.needsUpdate = CARTRIM.instanceMatrix.needsUpdate = true;
+  if (CARPAINT.instanceColor) CARPAINT.instanceColor.needsUpdate = true;
+}
+
+// ---------- light ----------
+const DAYC = { sun: new THREE.Color(0xfff0d8), hemi: new THREE.Color(0xe6efff), gnd: new THREE.Color(0x9a9484) };
+const EVEC = { sun: new THREE.Color(0xffb27a), hemi: new THREE.Color(0x8a96d0), gnd: new THREE.Color(0x4a4a5a) };
+function applyLight() {
+  const hr = 8 + 10 * clamp(S.t / DAY, 0, 1);
+  const d = clamp((hr - 16) / 2, 0, 1) * .75;
+  sun.intensity = lerp(1.32, .55, d); sun.color.copy(DAYC.sun).lerp(EVEC.sun, d);
+  hemi.intensity = lerp(.52, .45, d); hemi.color.copy(DAYC.hemi).lerp(EVEC.hemi, d); hemi.groundColor.copy(DAYC.gnd).lerp(EVEC.gnd, d);
+  WINLIT.emissiveIntensity = d * 1.2; HALO.opacity = d * .9; POOL.opacity = d * .3;
+  nightGroup.visible = d > .02;
+}
+
+// ---------- camera ----------
+function updateCamera() {
+  camera.left = -W / 2 / view.ppu; camera.right = W / 2 / view.ppu; camera.top = H / 2 / view.ppu; camera.bottom = -H / 2 / view.ppu;
+  camera.position.set(view.tx + CAMDIR.x * 140, CAMDIR.y * 140, view.tz + CAMDIR.z * 140);
+  camera.lookAt(view.tx, 0, view.tz);
+  camera.updateProjectionMatrix(); camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+}
+function proj(x, y, z) { _v.set(x, y, z).project(camera); return [(_v.x + 1) / 2 * W, (1 - _v.y) / 2 * H]; }
+function panBy(dx, dy) {
+  const r = dx / view.ppu / Math.SQRT2, f = dy / view.ppu / SIN_E / Math.SQRT2;
+  view.tx = clamp(view.tx - r - f, -6, 26); view.tz = clamp(view.tz + r - f, -6, 24);
+}
+function focusOn(x, z) {
+  const shift = (H * .18) / view.ppu / SIN_E / Math.SQRT2;
+  view.to = { x: x + shift, z: z + shift, t: 0, sx: view.tx, sz: view.tz };
+}
+function resize() {
+  const r = glc.getBoundingClientRect();
+  W = Math.max(1, r.width); H = Math.max(1, r.height);
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(DPR); renderer.setSize(W, H, false);
+  fxc.width = Math.round(W * DPR); fxc.height = Math.round(H * DPR);
+}
+
+// ---------- 2D overlay ----------
+let tags = [];
+function rr(x, y, w, h, r) { fx.beginPath(); if (fx.roundRect) fx.roundRect(x, y, w, h, r); else { fx.moveTo(x + r, y); fx.arcTo(x + w, y, x + w, y + h, r); fx.arcTo(x + w, y + h, x, y + h, r); fx.arcTo(x, y + h, x, y, r); fx.arcTo(x, y, x + w, y, r); fx.closePath(); } }
+function tag(text, x, y, size, bg, fg = '#fff', hit = null) {
+  fx.font = `800 ${size}px ${FONT}`; fx.textAlign = 'center'; fx.textBaseline = 'middle';
+  const w = fx.measureText(text).width + size * 1.1, h = size * 1.75;
+  fx.shadowColor = 'rgba(16,26,54,.35)'; fx.shadowBlur = 6; fx.shadowOffsetY = 2;
+  rr(x - w / 2, y - h / 2, w, h, h / 2); fx.fillStyle = bg; fx.fill();
+  fx.shadowColor = 'transparent'; fx.shadowBlur = 0; fx.shadowOffsetY = 0;
+  fx.fillStyle = fg; fx.fillText(text, x, y + size * .06);
+  if (hit) tags.push(Object.assign({ x0: x - Math.max(w, 60) / 2, x1: x + Math.max(w, 60) / 2, y0: y - Math.max(h, 44) / 2, y1: y + Math.max(h, 44) / 2 }, hit));
+}
+const coins = [], pops = [];
+function coinBurst(x, y, tx, ty, n) { for (let k = 0; k < n; k++) coins.push({ x0: x + rnd(-30, 30), y0: y + rnd(-20, 20), x1: tx, y1: ty, cx: x + rnd(-90, 90), cy: y - rnd(40, 140), t: -k * .045 }); }
+let popClock = 0;
+function drawFx(dt) {
+  fx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  fx.clearRect(0, 0, W, H);
+  fx.direction = 'ltr';
+  tags = [];
+  const ls = clamp(view.ppu / 32, .8, 1.25);
+  // production pops
+  if (S.speed > 0 && mode !== 'place') {
+    popClock += dt * S.speed;
+    if (popClock > .9) {
+      popClock = 0;
+      const live = S.emps.filter(e => { const p = walkers.get(e.id); return p && p.pose === 1; });
+      if (live.length) {
+        const e = pick(live), r = roomById(e.room), s = seatOf(r, e.desk);
+        pops.push({ x: s.x, z: s.z - .3, t: 0, text: '+' + Math.max(1, Math.round(empRate(e) / 10)), col: PT[TYPES[r.type].pt].col });
+      }
+    }
+  }
+  fx.font = `800 ${Math.round(13 * ls)}px ${FONT}`; fx.textAlign = 'center'; fx.textBaseline = 'middle';
+  for (let k = pops.length - 1; k >= 0; k--) {
+    const p = pops[k]; p.t += dt; if (p.t > 1.4) { pops.splice(k, 1); continue; }
+    const a = 1 - p.t / 1.4, q = proj(p.x, .9 + p.t * .6, p.z);
+    fx.globalAlpha = a; fx.fillStyle = 'rgba(255,255,255,.92)'; rr(q[0] - 19 * ls, q[1] - 10 * ls, 38 * ls, 20 * ls, 10 * ls); fx.fill();
+    fx.fillStyle = p.col; fx.fillText(p.text, q[0], q[1] + 1); fx.globalAlpha = 1;
+  }
+  // room tags
+  if (view.ppu >= 16) for (const r of S.rooms) {
+    const T0 = TYPES[r.type], [w] = dims(r.type, r.r);
+    const p = proj(r.x + w / 2, WH + .75, r.z + .25);
+    let text = `${T0.ico} ${T0.name}`;
+    const empty = T0.kind === 'prod' && !empsIn(r.id).length;
+    if (T0.kind === 'prod') text += ` · ${empsIn(r.id).length}/4`;
+    tag(text, p[0], p[1], 11.5 * ls, empty ? 'rgba(224,57,63,.92)' : 'rgba(16,26,54,.82)');
+  }
+  // locked plots
+  if (mode !== 'place') for (const pl of PLOTS) {
+    if (S.plots[pl.id]) continue;
+    const p = proj((pl.x0 + pl.x1) / 2, .9, (pl.z0 + pl.z1) / 2), ok = repLvl() >= pl.rep, can = ok && S.cash >= pl.cost;
+    tag(ok ? `🏗️ توسعة ${fmt(pl.cost)}` : `🔒 توسعة · ⭐${pl.rep}`, p[0], p[1], 13 * ls, can ? '#19a655' : 'rgba(16,26,54,.86)', '#fff', { act: 'plot', arg: pl.id });
+  }
+  // empty office hint
+  if (!S.rooms.length && mode !== 'place') { const p = proj(4, .6, 8); tag('اضغط «بناء» لتضع أول قسم هنا', p[0], p[1], 14, '#ffb820', '#3a2500', { act: 'build' }); }
+  // commute shortage pin
+  const sh = shortage();
+  if (sh > 0) {
+    const g0 = proj(3.2, 1.6, 18.6), py = g0[1] + Math.sin(T * 3) * 4, R0 = 20 * ls;
+    fx.shadowColor = 'rgba(16,26,54,.4)'; fx.shadowBlur = 8;
+    fx.beginPath(); fx.moveTo(g0[0] - R0 * .5, py + R0 * .75); fx.lineTo(g0[0] + R0 * .5, py + R0 * .75); fx.lineTo(g0[0], py + R0 * 1.5); fx.closePath(); fx.fillStyle = '#fff'; fx.fill();
+    fx.beginPath(); fx.arc(g0[0], py, R0, 0, 6.2832); fx.fill(); fx.shadowBlur = 0; fx.shadowColor = 'transparent';
+    fx.strokeStyle = '#e0393f'; fx.lineWidth = 3; fx.stroke();
+    fx.font = `${Math.round(22 * ls)}px system-ui`; fx.textAlign = 'center'; fx.textBaseline = 'middle'; fx.fillStyle = '#000'; fx.fillText('😡', g0[0], py + 1);
+    tag(`${sh} متأخرين: ابنِ مواصلات`, g0[0], py - R0 - 16 * ls, 12 * ls, '#e0393f', '#fff', { act: 'build' });
+  }
+  // door label while placing
+  if (mode === 'place' && place) {
+    const di = doorInfo(place), q = proj(di.p[0] + di.n[0] * .7, .3, di.p[1] + di.n[1] * .7);
+    tag('الباب', q[0], q[1], 11 * ls, '#ffb820', '#3a2500');
+  }
+  // coins
+  for (let k = coins.length - 1; k >= 0; k--) {
+    const c = coins[k]; c.t += dt / .75;
+    if (c.t < 0) continue;
+    if (c.t >= 1) { coins.splice(k, 1); if (k % 3 === 0) snd('coin'); continue; }
+    const t = c.t, u = 1 - t, x = u * u * c.x0 + 2 * u * t * c.cx + t * t * c.x1, y = u * u * c.y0 + 2 * u * t * c.cy + t * t * c.y1, s = 9 * (1 - t * .35);
+    fx.fillStyle = '#c98a00'; fx.beginPath(); fx.arc(x, y + 1.5, s, 0, 6.2832); fx.fill(); fx.fillStyle = '#ffcf33'; fx.beginPath(); fx.arc(x, y, s, 0, 6.2832); fx.fill();
+  }
+}
+
+// ---------- input ----------
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -.1), hitV = new THREE.Vector3();
+function groundAt(x, y) { ndc.set(x / W * 2 - 1, -(y / H * 2 - 1)); ray.setFromCamera(ndc, camera); return ray.ray.intersectPlane(plane, hitV) ? [hitV.x, hitV.z] : null; }
+function screenCell(x, y) { const g = groundAt(x, y); return g ? [Math.floor(g[0]), Math.floor(g[1])] : [3, 8]; }
+function roomAtCell(cx, cz) { return S.rooms.find(r => { const [w, d] = dims(r.type, r.r); return cx >= r.x && cx < r.x + w && cz >= r.z && cz < r.z + d; }); }
+function moveGhostTo(cx, cz, off) {
+  const [w, d] = dims(place.type, place.r);
+  const nx = clamp(cx - (off ? off[0] : Math.floor(w / 2)), 0, LOT_W - w), nz = clamp(cz - (off ? off[1] : Math.floor(d / 2)), 0, LOT_D - d);
+  if (nx !== place.x || nz !== place.z) { place.x = nx; place.z = nz; ghostDirty = true; }
+}
+const ptrs = new Map();
+let moved = false, downAt = 0, pinch = 0, drag = null;
+glc.addEventListener('pointerdown', e => {
+  try { glc.setPointerCapture(e.pointerId); } catch (er) {}
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  view.to = null;
+  if (ptrs.size === 1) {
+    moved = false; downAt = performance.now(); drag = null;
+    if (mode === 'place') {
+      const r = glc.getBoundingClientRect(), c = screenCell(e.clientX - r.left, e.clientY - r.top);
+      const [w, d] = dims(place.type, place.r);
+      if (c[0] >= place.x && c[0] < place.x + w && c[1] >= place.z && c[1] < place.z + d) drag = [c[0] - place.x, c[1] - place.z];
+    }
+  }
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); moved = true; drag = null; }
+});
+glc.addEventListener('pointermove', e => {
+  const p = ptrs.get(e.pointerId);
+  if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  if (ptrs.size === 1) {
+    if (!moved && Math.hypot(dx, dy) < 7) return;
+    moved = true;
+    if (drag && mode === 'place') { const r = glc.getBoundingClientRect(), c = screenCell(e.clientX - r.left, e.clientY - r.top); moveGhostTo(c[0], c[1], drag); }
+    else panBy(dx, dy);
+    p.x = e.clientX; p.y = e.clientY;
+  } else if (ptrs.size === 2) {
+    p.x = e.clientX; p.y = e.clientY;
+    const [a, b] = [...ptrs.values()], dist2 = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch > 0) view.ppu = clamp(view.ppu * dist2 / pinch, 14, 80);
+    pinch = dist2; panBy(dx / 2, dy / 2);
+  }
+});
+function up(e) {
+  const was = ptrs.size;
+  ptrs.delete(e.pointerId);
+  if (was === 1 && !moved && performance.now() - downAt < 500 && e.type === 'pointerup') {
+    const r = glc.getBoundingClientRect(); onTap(e.clientX - r.left, e.clientY - r.top);
+  }
+  if (!ptrs.size) drag = null;
+}
+glc.addEventListener('pointerup', up); glc.addEventListener('pointercancel', up);
+glc.addEventListener('wheel', e => { e.preventDefault(); view.ppu = clamp(view.ppu * (e.deltaY < 0 ? 1.1 : .9), 14, 80); }, { passive: false });
+function onTap(x, y) {
+  for (let i = tags.length - 1; i >= 0; i--) {
+    const t = tags[i];
+    if (x >= t.x0 && x <= t.x1 && y >= t.y0 && y <= t.y1) {
+      snd('tap');
+      if (t.act === 'plot') openSheet({ kind: 'plot', id: t.arg });
+      else if (t.act === 'build') openBuild();
+      return;
+    }
+  }
+  const c = screenCell(x, y);
+  if (mode === 'place') { moveGhostTo(c[0], c[1]); snd('tap'); return; }
+  const r = roomAtCell(c[0], c[1]);
+  if (r) { snd('tap'); openSheet({ kind: 'room', id: r.id }); return; }
+  const pl = plotOf(c[0], c[1]);
+  if (pl && !S.plots[pl.id]) { snd('tap'); openSheet({ kind: 'plot', id: pl.id }); }
+}
+
+// ======================= loop =======================
+let last = performance.now(), hudAt = 0, sheetAt = 0, saveAt = 0;
+function frame(t) {
+  const raw = Math.max((t - last) / 1000, 0), dt = Math.min(raw, .1);
+  last = t; T = t / 1000;
+  if (!S.over && S.speed > 0 && mode !== 'place') {
+    let g = Math.min(raw, .5) * S.speed;
+    while (g > 0) { const st = Math.min(g, .25); simulate(st); g -= st; }
+  }
+  if (t - hudAt > 200) { hudAt = t; updateHud(); applyLight(); }
+  if (sheet && !sheetTouch && t - sheetAt > 900 && ['contracts', 'team', 'finance', 'room', 'hire'].includes(sheet.kind)) { sheetAt = t; renderSheet(); }
+  if (t - saveAt > 10000) { saveAt = t; save(); }
+  if (view.to) { const o = view.to; o.t = Math.min(1, o.t + dt / .45); const k = 1 - Math.pow(1 - o.t, 3); view.tx = lerp(o.sx, o.x, k); view.tz = lerp(o.sz, o.z, k); if (o.t >= 1) view.to = null; }
+  syncLot(); syncRooms(); syncGhost(); syncFacilities(); syncPeople();
+  updatePeople(dt * Math.max(1, S.speed)); updateCars(dt);
+  updateCamera();
+  renderer.render(scene, camera);
+  drawFx(dt);
+  requestAnimationFrame(frame);
+}
+function newGame() {
+  S = fresh();
+  S.offers = [
+    { id: S.nid++, client: 'متجر لمسة', name: 'صفقة توريد', req: { S: 60 }, days: 4, pay: 320, rep: .2, exp: 3 },
+    { id: S.nid++, client: 'مقهى السنابل', name: 'هوية بصرية', req: { G: 50 }, days: 4, pay: 280, rep: .18, exp: 3 },
+    { id: S.nid++, client: 'نادي الصقور', name: 'معرض تجاري', req: { S: 50, G: 30 }, days: 5, pay: 420, rep: .22, exp: 3 },
+  ];
+  layoutVer++; walkers.clear(); peopleDirty = true; lotKey = ''; facKey = '';
+  for (const [, o] of roomObjs) kill(o.group); roomObjs.clear();
+  if (mode === 'place') { mode = 'idle'; place = null; ghostDirty = true; $('placebar').hidden = true; $('dock').hidden = false; }
+  sheet = null; $('sheet').hidden = true; $('scrim').hidden = true;
+  view.tx = 4.5; view.tz = 8; save(); updateHud();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else last = performance.now(); });
+addEventListener('pagehide', save);
+addEventListener('resize', resize);
+
+function start() {
+  if (!load()) newGame();
+  buildStatic(); buildAmbient();
+  resize();
+  view.ppu = W > 700 ? 46 : 32;
+  syncLot(); syncRooms(); syncFacilities(); syncPeople();
+  applyLight(); updateCamera(); updateHud();
+  $('boot').hidden = true;
+  if (S.over) openSheet({ kind: 'over' });
+  requestAnimationFrame(frame);
+}
+window.__game = { get walkers() { return walkers; }, routeFor, get S() { return S; }, view, renderer, validate, rates, newGame, openSheet, startPlace, confirmPlace, get place() { return place; }, endDay, simulate, hire, acceptOffer, buyFac, cands };
+window.claude?.hot?.snapshot?.(() => { save(); return {}; });
+if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start();
+})();
+</script>
+
+</body>
+</html>

@@ -5,6 +5,9 @@ Personal iPhone web apps, served with GitHub Pages.
 | App | Folder |
 |---|---|
 | Legion Clash | [`legion-clash/`](legion-clash/) |
+| Legion Raid | [`legion-raid/`](legion-raid/) |
+| Legion Defense | [`legion-defense/`](legion-defense/) |
+| برج الأعمال (Office Tower) | [`office-tower/`](office-tower/) |
 
 ## Install on iPhone
 Open an app in Safari → Share → **Add to Home Screen**. It then opens full screen.
